@@ -1,7 +1,6 @@
 import axios from "axios";
 
-const API_URL =
-  "http://localhost:5000/api/order";
+const API_URL = `${import.meta.env.VITE_BASIC_URL}/api/order`;
 
 const getAuthConfig = () => {
 
@@ -80,21 +79,21 @@ export const updateOrderStatus = async (
 export const getSellerAnalytics =
   async () => {
 
-    console.log(
-      "📊 Analytics API:",
-      "http://localhost:5000/api/seller/orders/analytics"
-    );
+    // console.log(
+    //   "📊 Analytics API:",
+    //   `${API_URL}/seller/orders/analytics`
+    // );
 
     const response =
       await axios.get(
-        "http://localhost:5000/api/seller/orders/analytics",
+        `${API_URL}/seller/orders/analytics`,
         getAuthConfig()
       );
 
-    console.log(
-      "📊 Analytics Response:",
-      response.data
-    );
+    // console.log(
+    //   "📊 Analytics Response:",
+    //   response.data
+    // );
 
     return response.data;
   };

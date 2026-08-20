@@ -1,7 +1,7 @@
 import axios from "axios";
 
-const API_URL =
-  "http://localhost:5000/api/wallet";
+const API_URL = `${import.meta.env.VITE_BASIC_URL}/api/wallet`;
+
 
 
 // =====================================
@@ -66,22 +66,22 @@ export const getWalletTransactions =
 export const createWithdrawal =
   async (withdrawalData) => {
 
-    console.log(
-      "================================="
-    );
+    // console.log(
+    //   "================================="
+    // );
 
-    console.log(
-      "💸 CREATE WITHDRAWAL API"
-    );
+    // console.log(
+    //   "💸 CREATE WITHDRAWAL API"
+    // );
 
-    console.log(
-      "Request:",
-      withdrawalData
-    );
+    // console.log(
+    //   "Request:",
+    //   withdrawalData
+    // );
 
-    console.log(
-      "================================="
-    );
+    // console.log(
+    //   "================================="
+    // );
 
 
     const response =
@@ -96,10 +96,10 @@ export const createWithdrawal =
       );
 
 
-    console.log(
-      "✅ Withdrawal response:",
-      response.data
-    );
+    // console.log(
+    //   "✅ Withdrawal response:",
+    //   response.data
+    // );
 
 
     return response.data;
