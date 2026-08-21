@@ -16,6 +16,7 @@ import VerifyLoginOTP from "./pages/auth/VerifyLoginOTP";
 import ForgotPassword from "./pages/auth/ForgotPassword";
 import VerifyResetOTP from "./pages/auth/VerifyResetOTP";
 import ResetPassword from "./pages/auth/ResetPassword";
+import PrivacyPolicy from "./pages/PrivacyPolicy.jsx";
 
 /* ================================
    SELLER ONBOARDING
@@ -128,7 +129,7 @@ function App() {
           path="/verify-reset-otp"
           element={<VerifyResetOTP />}
         />
-
+<Route path="/privacy-policy" element={<PrivacyPolicy />} />
         <Route
           path="/reset-password"
           element={<ResetPassword />}
