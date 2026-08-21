@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const API_URL = `${import.meta.env.VITE_BASIC_URL}/api/settings`;
+const API_URL = `${import.meta.env.VITE_BASIC_URL}/api/seller/settings`;
 
 
 const getAuthConfig = () => {
