@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const API_URL = `${import.meta.env.VITE_BASIC_URL}/api/order`;
+const API_URL = `${import.meta.env.VITE_BASIC_URL}/api`;
 
 
 const getAuthConfig = () => {
@@ -26,7 +26,7 @@ export const getSellerOrders =
 
     const response =
       await axios.get(
-        `${API_URL}/seller/orders`,
+        `${API_URL}/order/seller/orders`,
         getAuthConfig()
       );
 
@@ -43,7 +43,7 @@ export const getSellerOrder =
 
     const response =
       await axios.get(
-        `${API_URL}/${orderId}`,
+        `${API_URL}/order/${orderId}`,
         getAuthConfig()
       );
 
@@ -63,7 +63,7 @@ export const updateOrderStatus =
 
     const response =
       await axios.put(
-        `${API_URL}/status/${orderId}`,
+        `${API_URL}/order/status/${orderId}`,
         {
           status,
         },

@@ -39,7 +39,7 @@ function Login() {
   const [serverError, setServerError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-
+console.log("VITE_BASIC_URL =", import.meta.env.VITE_BASIC_URL);
   /*
   |--------------------------------------------------------------------------
   | AOS
