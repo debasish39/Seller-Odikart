@@ -37,6 +37,7 @@ import ProductDetails from "./pages/seller/products/ProductDetails";
 import EditProduct from "./pages/seller/products/EditProduct";
 import ProductStock from "./pages/seller/products/ProductStock";
 import AddProduct from "./pages/seller/AddProduct";
+import NotFound from "./pages/NotFound.jsx";
 
 /* ================================
    SELLER VERIFICATION PROTECTION
@@ -296,6 +297,8 @@ function App() {
 
         </Route>
 
+      {/* 404 route - MUST be last */}
+      <Route path="*" element={<NotFound />} />
       </Routes>
 
     </BrowserRouter>
