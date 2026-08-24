@@ -437,16 +437,62 @@ const AddProduct = () => {
       setTimeout(() => {
         navigate("/seller/products");
       }, 1000);
-    } catch (err) {
-      console.error("Create Product Error:", err);
-      console.error("Create Product Status:", err.response?.status);
-      console.error("Create Product Response:", err.response?.data);
+} catch (err) {
 
-      setError(
-        err.response?.data?.message ||
-          "Failed to create product"
-      );
-    } finally {
+  console.error(
+    "================================="
+  );
+
+  console.error(
+    "🔥 CREATE PRODUCT FRONTEND ERROR"
+  );
+
+  console.error(
+    "Message:",
+    err?.message
+  );
+
+  console.error(
+    "Status:",
+    err?.response?.status
+  );
+
+  console.error(
+    "Response data:",
+    err?.response?.data
+  );
+
+  console.error(
+    "Response headers:",
+    err?.response?.headers
+  );
+
+  console.error(
+    "Request URL:",
+    err?.config?.url
+  );
+
+  console.error(
+    "Request method:",
+    err?.config?.method
+  );
+
+  console.error(
+    "================================="
+  );
+
+
+  const backendMessage =
+    err?.response?.data?.message;
+
+
+  setError(
+    backendMessage ||
+    err?.message ||
+    "Failed to create product"
+  );
+
+} finally {
       setLoading(false);
     }
   };

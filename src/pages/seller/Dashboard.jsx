@@ -11,6 +11,9 @@ import {
   getSellerAnalytics,
 } from "../../services/sellerOrderService";
 
+import api from "../../services/api";
+
+
 /* =========================================================
    ICON
 ========================================================= */
@@ -19,6 +22,7 @@ const Icon = ({
   name,
   size = 20,
 }) => {
+
   const common = {
     width: size,
     height: size,
@@ -30,8 +34,11 @@ const Icon = ({
     strokeLinejoin: "round",
   };
 
+
   switch (name) {
+
     case "package":
+
       return (
         <svg {...common}>
           <path d="m21 8-9-5-9 5 9 5 9-5Z" />
@@ -40,7 +47,9 @@ const Icon = ({
         </svg>
       );
 
+
     case "orders":
+
       return (
         <svg {...common}>
           <path d="M6 8h12l1 13H5L6 8Z" />
@@ -48,7 +57,9 @@ const Icon = ({
         </svg>
       );
 
+
     case "wallet":
+
       return (
         <svg {...common}>
           <path d="M3 7h18v13H3z" />
@@ -58,7 +69,9 @@ const Icon = ({
         </svg>
       );
 
+
     case "chart":
+
       return (
         <svg {...common}>
           <path d="M4 19V5" />
@@ -67,7 +80,9 @@ const Icon = ({
         </svg>
       );
 
+
     case "box":
+
       return (
         <svg {...common}>
           <path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z" />
@@ -76,7 +91,9 @@ const Icon = ({
         </svg>
       );
 
+
     case "shield":
+
       return (
         <svg {...common}>
           <path d="M12 3 20 6v5c0 5-3.4 8.8-8 10-4.6-1.2-8-5-8-10V6l8-3Z" />
@@ -84,7 +101,9 @@ const Icon = ({
         </svg>
       );
 
+
     case "upload":
+
       return (
         <svg {...common}>
           <path d="M12 16V4" />
@@ -93,7 +112,9 @@ const Icon = ({
         </svg>
       );
 
+
     case "warning":
+
       return (
         <svg {...common}>
           <path d="M12 3 22 20H2L12 3Z" />
@@ -102,7 +123,9 @@ const Icon = ({
         </svg>
       );
 
+
     case "clock":
+
       return (
         <svg {...common}>
           <circle cx="12" cy="12" r="9" />
@@ -110,7 +133,9 @@ const Icon = ({
         </svg>
       );
 
+
     case "plus":
+
       return (
         <svg {...common}>
           <path d="M12 5v14" />
@@ -118,7 +143,9 @@ const Icon = ({
         </svg>
       );
 
+
     case "refresh":
+
       return (
         <svg {...common}>
           <path d="M20 11a8.1 8.1 0 0 0-14.9-3L3 11" />
@@ -128,7 +155,9 @@ const Icon = ({
         </svg>
       );
 
+
     case "arrow":
+
       return (
         <svg {...common}>
           <path d="M5 12h14" />
@@ -136,7 +165,9 @@ const Icon = ({
         </svg>
       );
 
+
     case "external":
+
       return (
         <svg {...common}>
           <path d="M7 17 17 7" />
@@ -144,120 +175,359 @@ const Icon = ({
         </svg>
       );
 
+
     default:
       return null;
+
   }
+
 };
+
 
 /* =========================================================
    HELPERS
 ========================================================= */
 
 const numberFormat = (value) =>
-  Number(value || 0).toLocaleString("en-IN");
+  Number(value || 0).toLocaleString(
+    "en-IN"
+  );
+
 
 const currencyFormat = (value) =>
-  `₹${Number(value || 0).toLocaleString("en-IN")}`;
+  `₹${Number(value || 0).toLocaleString(
+    "en-IN"
+  )}`;
+
 
 /* =========================================================
    DASHBOARD
 ========================================================= */
 
 const Dashboard = () => {
-  const navigate = useNavigate();
 
-  const [analytics, setAnalytics] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [user, setUser] = useState(null);
+  const navigate =
+    useNavigate();
 
-  /* =======================================================
-     USER
-  ======================================================= */
 
-  const loadSellerUser = () => {
-    try {
-      const storedUser =
-        localStorage.getItem("user");
+  const [
+    analytics,
+    setAnalytics,
+  ] = useState(null);
 
-      if (!storedUser) {
-        setUser(null);
-        return;
-      }
 
-      const parsedUser =
-        JSON.parse(storedUser);
+  const [
+    loading,
+    setLoading,
+  ] = useState(true);
 
-      setUser(parsedUser);
-    } catch (error) {
-      console.error(
-        "Unable to load seller:",
-        error
-      );
 
-      setUser(null);
-    }
-  };
+  const [
+    error,
+    setError,
+  ] = useState("");
+
+
+  const [
+    user,
+    setUser,
+  ] = useState(null);
+
 
   /* =======================================================
-     ANALYTICS
+     LOAD CURRENT USER
+     
+     IMPORTANT:
+     Don't use sellerUser.
+     Don't trust old localStorage user.
+     
+     Ask the backend for the latest user.
   ======================================================= */
 
-  const loadAnalytics = async () => {
-    try {
-      setLoading(true);
-      setError("");
+  const loadSellerUser =
+    async () => {
 
-      const data =
-        await getSellerAnalytics();
+      try {
 
-      console.log(
-        "SELLER ANALYTICS:",
-        data
-      );
+        const token =
+          localStorage.getItem(
+            "token"
+          );
 
-      if (!data?.success) {
-        setError(
-          data?.message ||
-            "Unable to load dashboard"
+
+        console.log(
+          "================================="
         );
 
-        return;
+        console.log(
+          "🔐 DASHBOARD AUTH CHECK"
+        );
+
+        console.log(
+          "Token exists:",
+          Boolean(token)
+        );
+
+        console.log(
+          "================================="
+        );
+
+
+        if (!token) {
+
+          console.warn(
+            "❌ No authentication token"
+          );
+
+          setUser(null);
+
+          navigate(
+            "/login",
+            {
+              replace: true,
+            }
+          );
+
+          return;
+
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | GET FRESH USER
+        |--------------------------------------------------------------------------
+        */
+
+        const response =
+          await api.get(
+            "/auth/me"
+          );
+
+
+        const currentUser =
+          response.data?.user;
+
+
+        console.log(
+          "========== /auth/me =========="
+        );
+
+        console.log(
+          "User:",
+          currentUser
+        );
+
+        console.log(
+          "Role:",
+          currentUser?.role
+        );
+
+        console.log(
+          "Seller Status:",
+          currentUser?.sellerStatus
+        );
+
+        console.log(
+          "KYC Status:",
+          currentUser?.sellerVerificationStatus
+        );
+
+        console.log(
+          "Active Mode:",
+          currentUser?.activeMode
+        );
+
+        console.log(
+          "==============================="
+        );
+
+
+        if (!currentUser) {
+
+          throw new Error(
+            "User information was not returned"
+          );
+
+        }
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | SAVE FRESH USER CACHE
+        |--------------------------------------------------------------------------
+        */
+
+        localStorage.setItem(
+          "user",
+          JSON.stringify(
+            currentUser
+          )
+        );
+
+
+        /*
+        | Remove obsolete seller session
+        */
+
+        localStorage.removeItem(
+          "sellerUser"
+        );
+
+        localStorage.removeItem(
+          "sellerToken"
+        );
+
+        localStorage.removeItem(
+          "sellerRole"
+        );
+
+        localStorage.removeItem(
+          "sellerEmail"
+        );
+
+
+        setUser(
+          currentUser
+        );
+
+
+      } catch (error) {
+
+        console.error(
+          "❌ Dashboard user error:",
+          error
+        );
+
+
+        setUser(null);
+
+
+        if (
+          error?.response?.status ===
+          401
+        ) {
+
+          localStorage.removeItem(
+            "token"
+          );
+
+          localStorage.removeItem(
+            "user"
+          );
+
+
+          navigate(
+            "/login",
+            {
+              replace: true,
+            }
+          );
+
+        }
+
       }
 
-      setAnalytics(
-        data?.analytics || {}
-      );
-    } catch (error) {
-      console.error(
-        "Dashboard error:",
-        error
-      );
+    };
 
-      setError(
-        error?.response?.data?.message ||
+
+  /* =======================================================
+     LOAD ANALYTICS
+  ======================================================= */
+
+  const loadAnalytics =
+    async () => {
+
+      try {
+
+        setLoading(true);
+
+        setError("");
+
+
+        console.log(
+          "📊 Loading seller analytics..."
+        );
+
+
+        const data =
+          await getSellerAnalytics();
+
+
+        console.log(
+          "📊 SELLER ANALYTICS:",
+          data
+        );
+
+
+        if (!data?.success) {
+
+          setError(
+            data?.message ||
+            "Unable to load dashboard"
+          );
+
+          return;
+
+        }
+
+
+        setAnalytics(
+          data?.analytics || {}
+        );
+
+
+      } catch (error) {
+
+        console.error(
+          "❌ Dashboard analytics error:",
+          error
+        );
+
+
+        setError(
+          error?.response?.data?.message ||
           error?.message ||
           "Unable to load dashboard"
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
+        );
+
+
+      } finally {
+
+        setLoading(false);
+
+      }
+
+    };
+
 
   /* =======================================================
      INITIAL LOAD
   ======================================================= */
 
   useEffect(() => {
-    loadSellerUser();
-    loadAnalytics();
+
+    const loadDashboard =
+      async () => {
+
+        await loadSellerUser();
+
+        await loadAnalytics();
+
+      };
+
+
+    loadDashboard();
+
   }, []);
+
 
   /* =======================================================
      LOADING
   ======================================================= */
 
-  if (loading) {
+  if (loading || !user) {
+
     return (
       <main className="min-h-full bg-[#f7f8fa] px-4 py-5 sm:px-6 lg:px-8">
 
@@ -266,31 +536,38 @@ const Dashboard = () => {
           <div className="flex items-center justify-between">
 
             <div>
+
               <div className="h-3 w-28 rounded bg-slate-200" />
 
               <div className="mt-3 h-8 w-64 rounded-lg bg-slate-200" />
 
               <div className="mt-3 h-4 w-80 max-w-full rounded bg-slate-200" />
+
             </div>
 
             <div className="h-10 w-10 rounded-full bg-slate-200" />
 
           </div>
 
+
           <div className="mt-7 h-36 rounded-[24px] bg-slate-200" />
+
 
           <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
 
             {[1, 2, 3, 4].map(
               (item) => (
+
                 <div
                   key={item}
                   className="h-40 rounded-[22px] bg-slate-200"
                 />
+
               )
             )}
 
           </div>
+
 
           <div className="mt-6 grid gap-4 lg:grid-cols-2">
 
@@ -304,13 +581,16 @@ const Dashboard = () => {
 
       </main>
     );
+
   }
+
 
   /* =======================================================
      ERROR
   ======================================================= */
 
   if (error) {
+
     return (
       <main className="min-h-full bg-[#f7f8fa] px-4 py-6 sm:px-6 lg:px-8">
 
@@ -319,30 +599,48 @@ const Dashboard = () => {
           <div className="w-full rounded-[24px] border border-slate-100 bg-white p-7 text-center shadow-sm">
 
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-50 text-rose-600">
+
               <Icon
                 name="warning"
                 size={25}
               />
+
             </div>
 
+
             <h1 className="mt-5 text-xl font-bold text-slate-950">
+
               Dashboard unavailable
+
             </h1>
 
+
             <p className="mt-2 text-sm leading-6 text-slate-500">
+
               {error}
+
             </p>
+
 
             <button
               type="button"
-              onClick={loadAnalytics}
+              onClick={() => {
+
+                loadSellerUser();
+
+                loadAnalytics();
+
+              }}
               className="mt-6 inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-slate-950 px-6 text-sm font-bold text-white transition hover:bg-slate-800"
             >
+
               <Icon
                 name="refresh"
                 size={17}
               />
+
               Try Again
+
             </button>
 
           </div>
@@ -351,7 +649,9 @@ const Dashboard = () => {
 
       </main>
     );
+
   }
+
 
   /* =======================================================
      SAFE ANALYTICS
@@ -360,264 +660,425 @@ const Dashboard = () => {
   const overview =
     analytics?.overview || {};
 
+
   const orders =
     analytics?.orders || {};
 
+
   const inventory =
     analytics?.inventory || {};
+
 
   const totalOrders =
     Number(
       overview?.totalOrders || 0
     );
 
+
   const totalSales =
     Number(
       overview?.totalSales || 0
     );
+
 
   const totalRevenue =
     Number(
       overview?.totalRevenue || 0
     );
 
+
   const totalProducts =
     Number(
       overview?.totalProducts || 0
     );
+
 
   const commission =
     Number(
       overview?.commission || 0
     );
 
+
   const commissionRate =
     Number(
       overview?.commissionRate || 0
     );
+
 
   const pendingOrders =
     Number(
       orders?.pending || 0
     );
 
+
   const confirmedOrders =
     Number(
       orders?.confirmed || 0
     );
+
 
   const processingOrders =
     Number(
       orders?.processing || 0
     );
 
+
   const packedOrders =
     Number(
       orders?.packed || 0
     );
+
 
   const shippedOrders =
     Number(
       orders?.shipped || 0
     );
 
+
   const deliveredOrders =
     Number(
       orders?.delivered || 0
     );
+
 
   const cancelledOrders =
     Number(
       orders?.cancelled || 0
     );
 
+
   const returnedOrders =
     Number(
       orders?.returned || 0
     );
+
 
   const lowStock =
     Number(
       inventory?.lowStock || 0
     );
 
+
   const outOfStock =
     Number(
       inventory?.outOfStock || 0
     );
 
+
   /* =======================================================
      SELLER VERIFICATION
+     
+     IMPORTANT:
+     Use normalized API field:
+     sellerVerificationStatus
+     
+     NOT:
+     sellerInfo.verification.status
   ======================================================= */
 
   const sellerStatus =
     user?.sellerStatus ||
     "pending";
 
+
   const verificationStatus =
-    user?.sellerInfo?.verification
-      ?.status ||
+    user?.sellerVerificationStatus ||
     "pending";
 
-  const hasDocuments =
+
+  /* =======================================================
+     DOCUMENT STATUS
+     
+     Used only for UI messaging.
+  ======================================================= */
+
+  const hasAadhaarFront =
     Boolean(
-      user?.sellerInfo?.kyc?.aadhaar
-        ?.frontImage ||
-      user?.sellerInfo?.kyc?.aadhaar
-        ?.backImage ||
-      user?.sellerInfo?.kyc?.pan
-        ?.image ||
-      user?.sellerInfo?.kyc?.bankProof
-        ?.image ||
-      user?.sellerInfo?.kyc?.gst
-        ?.certificate
+      user
+        ?.sellerInfo
+        ?.kyc
+        ?.aadhaar
+        ?.frontImage
     );
 
+
+  const hasAadhaarBack =
+    Boolean(
+      user
+        ?.sellerInfo
+        ?.kyc
+        ?.aadhaar
+        ?.backImage
+    );
+
+
+  const hasPan =
+    Boolean(
+      user
+        ?.sellerInfo
+        ?.kyc
+        ?.pan
+        ?.image
+    );
+
+
+  const hasBankProof =
+    Boolean(
+      user
+        ?.sellerInfo
+        ?.kyc
+        ?.bankProof
+        ?.image
+    );
+
+
+  const hasDocuments =
+    hasAadhaarFront ||
+    hasAadhaarBack ||
+    hasPan ||
+    hasBankProof;
+
+
+  /* =======================================================
+     FINAL VERIFICATION
+  ======================================================= */
+
   const isVerified =
+    user?.role === "seller" &&
     sellerStatus === "approved" &&
     verificationStatus === "approved";
+
 
   const isRejected =
     sellerStatus === "rejected" ||
     verificationStatus === "rejected";
 
+
   const rejectionReason =
     user?.sellerRejectedReason ||
-    user?.sellerInfo?.verification
+    user?.sellerInfo
+      ?.verification
       ?.rejectionReason ||
     "";
+
+
+  console.log(
+    "=========================================="
+  );
+
+  console.log(
+    "🏪 DASHBOARD SELLER VERIFICATION"
+  );
+
+  console.log(
+    "Role:",
+    user?.role
+  );
+
+  console.log(
+    "Seller Status:",
+    sellerStatus
+  );
+
+  console.log(
+    "KYC Status:",
+    verificationStatus
+  );
+
+  console.log(
+    "Has Documents:",
+    hasDocuments
+  );
+
+  console.log(
+    "Seller Verified:",
+    isVerified
+  );
+
+  console.log(
+    "=========================================="
+  );
+
 
   /* =======================================================
      ACTIONS
   ======================================================= */
 
   const handleAddProduct = () => {
+
+    console.log(
+      "🛒 ADD PRODUCT CLICK"
+    );
+
+    console.log(
+      "Verified:",
+      isVerified
+    );
+
+
     if (!isVerified) {
+
       navigate(
         "/seller/upload-documents"
       );
 
       return;
+
     }
+
 
     navigate(
       "/seller/products/add"
     );
+
   };
 
+
   const handleVerification = () => {
+
     navigate(
       "/seller/upload-documents"
     );
+
   };
+
 
   /* =======================================================
      ORDER STATUS
   ======================================================= */
 
   const orderStatuses = [
+
     {
       label: "Pending",
       value: pendingOrders,
       style:
         "bg-amber-50 border-amber-100",
     },
+
     {
       label: "Confirmed",
       value: confirmedOrders,
       style:
         "bg-sky-50 border-sky-100",
     },
+
     {
       label: "Processing",
       value: processingOrders,
       style:
         "bg-violet-50 border-violet-100",
     },
+
     {
       label: "Packed",
       value: packedOrders,
       style:
         "bg-orange-50 border-orange-100",
     },
+
     {
       label: "Shipped",
       value: shippedOrders,
       style:
         "bg-indigo-50 border-indigo-100",
     },
+
     {
       label: "Delivered",
       value: deliveredOrders,
       style:
         "bg-emerald-50 border-emerald-100",
     },
+
     {
       label: "Cancelled",
       value: cancelledOrders,
       style:
         "bg-rose-50 border-rose-100",
     },
+
     {
       label: "Returned",
       value: returnedOrders,
       style:
         "bg-slate-100 border-slate-200",
     },
+
   ];
+
 
   /* =======================================================
      QUICK ACTIONS
   ======================================================= */
 
   const quickActions = [
+
     {
       title: "Add Product",
+
       description:
         isVerified
           ? "Create a new product"
           : "Verification required",
+
       icon: "plus",
+
       onClick:
         handleAddProduct,
     },
+
     {
       title: "Products",
+
       description:
         "Manage your catalog",
+
       icon: "package",
+
       onClick: () =>
         navigate(
           "/seller/products"
         ),
     },
+
     {
       title: "Orders",
+
       description:
         "Manage customer orders",
+
       icon: "orders",
+
       onClick: () =>
         navigate(
           "/seller/orders"
         ),
     },
+
     {
       title: "Wallet",
+
       description:
         "Balance & payouts",
+
       icon: "wallet",
+
       onClick: () =>
         navigate(
           "/seller/wallet"
         ),
     },
+
   ];
+
 
   /* =======================================================
      RENDER
   ======================================================= */
 
   return (
+
     <main className="min-h-full bg-[#f7f8fa] px-3 py-4 sm:px-5 sm:py-6 lg:px-8 lg:py-7">
 
       <div className="mx-auto max-w-7xl">
@@ -631,24 +1092,36 @@ const Dashboard = () => {
           <div className="min-w-0">
 
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+
               Store overview
+
             </p>
 
+
             <h1 className="mt-1 truncate text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">
+
               Good morning,{" "}
+
               {user?.firstName ||
                 "Seller"}
+
             </h1>
 
+
             <p className="mt-1.5 hidden text-sm text-slate-500 sm:block">
-              Here's what's happening with your store today.
+
+              Here's what's happening with
+              your store today.
+
             </p>
 
           </div>
 
+
           <div className="flex shrink-0 items-center gap-2">
 
             {isVerified && (
+
               <div className="hidden items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 sm:flex">
 
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
@@ -656,23 +1129,34 @@ const Dashboard = () => {
                 Verified Seller
 
               </div>
+
             )}
+
 
             <button
               type="button"
-              onClick={loadAnalytics}
+              onClick={() => {
+
+                loadSellerUser();
+
+                loadAnalytics();
+
+              }}
               className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50"
               aria-label="Refresh dashboard"
             >
+
               <Icon
                 name="refresh"
                 size={18}
               />
+
             </button>
 
           </div>
 
         </header>
+
 
         {/* =================================================
             VERIFICATION CARD
@@ -681,6 +1165,7 @@ const Dashboard = () => {
         <section className="mb-6">
 
           {isVerified ? (
+
             <div className="overflow-hidden rounded-[24px] border border-emerald-100 bg-white shadow-[0_2px_16px_rgba(15,23,42,0.04)]">
 
               <div className="flex flex-col gap-5 bg-emerald-50/70 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
@@ -688,33 +1173,47 @@ const Dashboard = () => {
                 <div className="flex items-start gap-4">
 
                   <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white text-emerald-600 shadow-sm">
+
                     <Icon
                       name="shield"
                       size={23}
                     />
+
                   </div>
+
 
                   <div className="min-w-0">
 
                     <div className="flex flex-wrap items-center gap-2">
 
                       <h2 className="text-base font-bold text-emerald-950">
+
                         Seller account verified
+
                       </h2>
 
+
                       <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-700">
+
                         Approved
+
                       </span>
 
                     </div>
 
+
                     <p className="mt-1 text-sm leading-6 text-emerald-700">
-                      Your seller verification is complete. You can now add products and sell on the platform.
+
+                      Your seller verification is
+                      complete. You can now add
+                      products and sell on the platform.
+
                     </p>
 
                   </div>
 
                 </div>
+
 
                 <button
                   type="button"
@@ -723,17 +1222,22 @@ const Dashboard = () => {
                   }
                   className="inline-flex min-h-11 w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-slate-950 px-5 text-sm font-bold text-white transition hover:bg-slate-800 sm:w-auto"
                 >
+
                   <Icon
                     name="plus"
                     size={17}
                   />
+
                   Add Product
+
                 </button>
 
               </div>
 
             </div>
+
           ) : isRejected ? (
+
             <div className="overflow-hidden rounded-[24px] border border-rose-100 bg-white shadow-sm">
 
               <div className="bg-rose-50 p-5 sm:p-6">
@@ -743,47 +1247,68 @@ const Dashboard = () => {
                   <div className="flex items-start gap-4">
 
                     <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white text-rose-600 shadow-sm">
+
                       <Icon
                         name="warning"
                         size={23}
                       />
+
                     </div>
+
 
                     <div>
 
                       <div className="flex flex-wrap items-center gap-2">
 
                         <h2 className="text-base font-bold text-rose-950">
+
                           Verification needs attention
+
                         </h2>
 
+
                         <span className="rounded-full bg-rose-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-rose-700">
+
                           Rejected
+
                         </span>
 
                       </div>
 
+
                       <p className="mt-1 text-sm leading-6 text-rose-700">
-                        Please update your seller documents and submit them again.
+
+                        Please update your seller
+                        documents and submit them again.
+
                       </p>
 
+
                       {rejectionReason && (
+
                         <div className="mt-3 rounded-xl bg-white/70 p-3">
 
                           <p className="text-[10px] font-bold uppercase tracking-wider text-rose-400">
+
                             Rejection reason
+
                           </p>
 
+
                           <p className="mt-1 text-xs leading-5 text-rose-700">
+
                             {rejectionReason}
+
                           </p>
 
                         </div>
+
                       )}
 
                     </div>
 
                   </div>
+
 
                   <button
                     type="button"
@@ -792,11 +1317,14 @@ const Dashboard = () => {
                     }
                     className="inline-flex min-h-11 w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-slate-950 px-5 text-sm font-bold text-white sm:w-auto"
                   >
+
                     Upload Again
+
                     <Icon
                       name="arrow"
                       size={16}
                     />
+
                   </button>
 
                 </div>
@@ -804,7 +1332,9 @@ const Dashboard = () => {
               </div>
 
             </div>
+
           ) : !hasDocuments ? (
+
             <div className="overflow-hidden rounded-[24px] border border-amber-100 bg-white shadow-sm">
 
               <div className="bg-amber-50 p-5 sm:p-6">
@@ -814,33 +1344,46 @@ const Dashboard = () => {
                   <div className="flex items-start gap-4">
 
                     <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white text-amber-600 shadow-sm">
+
                       <Icon
                         name="upload"
                         size={23}
                       />
+
                     </div>
+
 
                     <div>
 
                       <div className="flex flex-wrap items-center gap-2">
 
                         <h2 className="text-base font-bold text-amber-950">
+
                           Complete seller verification
+
                         </h2>
 
+
                         <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-700">
+
                           Required
+
                         </span>
 
                       </div>
 
+
                       <p className="mt-1 text-sm leading-6 text-amber-700">
-                        Upload your KYC documents to get your seller account approved.
+
+                        Upload your KYC documents
+                        to get your seller account approved.
+
                       </p>
 
                     </div>
 
                   </div>
+
 
                   <button
                     type="button"
@@ -849,11 +1392,14 @@ const Dashboard = () => {
                     }
                     className="inline-flex min-h-11 w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-slate-950 px-5 text-sm font-bold text-white sm:w-auto"
                   >
+
                     Upload Documents
+
                     <Icon
                       name="arrow"
                       size={16}
                     />
+
                   </button>
 
                 </div>
@@ -861,7 +1407,9 @@ const Dashboard = () => {
               </div>
 
             </div>
+
           ) : (
+
             <div className="overflow-hidden rounded-[24px] border border-sky-100 bg-white shadow-sm">
 
               <div className="bg-sky-50 p-5 sm:p-6">
@@ -871,33 +1419,47 @@ const Dashboard = () => {
                   <div className="flex items-start gap-4">
 
                     <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white text-sky-600 shadow-sm">
+
                       <Icon
                         name="clock"
                         size={23}
                       />
+
                     </div>
+
 
                     <div>
 
                       <div className="flex flex-wrap items-center gap-2">
 
                         <h2 className="text-base font-bold text-sky-950">
+
                           Verification in review
+
                         </h2>
 
+
                         <span className="rounded-full bg-sky-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-sky-700">
+
                           Pending
+
                         </span>
 
                       </div>
 
+
                       <p className="mt-1 text-sm leading-6 text-sky-700">
-                        Your documents are waiting for admin approval. Product creation will unlock after approval.
+
+                        Your documents are waiting for
+                        admin approval. Product creation
+                        will unlock after approval.
+
                       </p>
 
                     </div>
 
                   </div>
+
 
                   <button
                     type="button"
@@ -906,11 +1468,14 @@ const Dashboard = () => {
                     }
                     className="inline-flex min-h-11 w-full shrink-0 items-center justify-center gap-2 rounded-xl border border-sky-200 bg-white px-5 text-sm font-bold text-sky-800 sm:w-auto"
                   >
+
                     View Documents
+
                     <Icon
                       name="arrow"
                       size={16}
                     />
+
                   </button>
 
                 </div>
@@ -918,9 +1483,11 @@ const Dashboard = () => {
               </div>
 
             </div>
+
           )}
 
         </section>
+
 
         {/* =================================================
             QUICK ACTIONS
@@ -928,87 +1495,99 @@ const Dashboard = () => {
 
         <section className="mb-7">
 
-          <div className="mb-3 flex items-center justify-between">
+          <div className="mb-3">
 
-            <div>
-              <h2 className="text-base font-bold text-slate-950">
-                Quick actions
-              </h2>
+            <h2 className="text-base font-bold text-slate-950">
 
-              <p className="mt-0.5 text-xs text-slate-400">
-                Common seller actions
-              </p>
-            </div>
+              Quick actions
+
+            </h2>
+
+
+            <p className="mt-0.5 text-xs text-slate-400">
+
+              Common seller actions
+
+            </p>
 
           </div>
-<div
-  className="
-    flex
-    gap-3
-    overflow-x-auto
-    overscroll-x-contain
-    pb-2
-    snap-x
-    snap-mandatory
-    [-ms-overflow-style:none]
-    [scrollbar-width:none]
-    [&::-webkit-scrollbar]:hidden
-  "
->
-  {quickActions.map((action) => (
-    <button
-      key={action.title}
-      type="button"
-      onClick={action.onClick}
-      className="
-        group
-        flex
-        min-w-[210px]
-        shrink-0
-        snap-start
-        items-center
-        gap-3
-        rounded-[20px]
-        border
-        border-slate-100
-        bg-white
-        p-3.5
-        text-left
-        shadow-[0_2px_12px_rgba(15,23,42,0.035)]
-        transition
-        hover:-translate-y-0.5
-        hover:border-slate-200
-        hover:shadow-md
-        active:scale-[0.98]
-        sm:min-w-[230px]
-      "
-    >
-      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-slate-950 text-white">
-        <Icon
-          name={action.icon}
-          size={19}
-        />
-      </div>
 
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-bold text-slate-900">
-          {action.title}
-        </p>
 
-        <p className="mt-0.5 truncate text-[11px] text-slate-400">
-          {action.description}
-        </p>
-      </div>
+          <div className="flex gap-3 overflow-x-auto overscroll-x-contain pb-2 snap-x snap-mandatory [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
 
-      <Icon
-        name="arrow"
-        size={15}
-      />
-    </button>
-  ))}
-</div>
+            {quickActions.map(
+              (action) => (
+
+                <button
+                  key={action.title}
+                  type="button"
+                  onClick={action.onClick}
+                  className="
+                    group
+                    flex
+                    min-w-[210px]
+                    shrink-0
+                    snap-start
+                    items-center
+                    gap-3
+                    rounded-[20px]
+                    border
+                    border-slate-100
+                    bg-white
+                    p-3.5
+                    text-left
+                    shadow-[0_2px_12px_rgba(15,23,42,0.035)]
+                    transition
+                    hover:-translate-y-0.5
+                    hover:border-slate-200
+                    hover:shadow-md
+                    active:scale-[0.98]
+                    sm:min-w-[230px]
+                  "
+                >
+
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-slate-950 text-white">
+
+                    <Icon
+                      name={action.icon}
+                      size={19}
+                    />
+
+                  </div>
+
+
+                  <div className="min-w-0 flex-1">
+
+                    <p className="truncate text-sm font-bold text-slate-900">
+
+                      {action.title}
+
+                    </p>
+
+
+                    <p className="mt-0.5 truncate text-[11px] text-slate-400">
+
+                      {action.description}
+
+                    </p>
+
+                  </div>
+
+
+                  <Icon
+                    name="arrow"
+                    size={15}
+                  />
+
+                </button>
+
+              )
+            )}
+
+          </div>
 
         </section>
+
 
         {/* =================================================
             PERFORMANCE
@@ -1019,14 +1598,20 @@ const Dashboard = () => {
           <div className="mb-3">
 
             <h2 className="text-base font-bold text-slate-950">
+
               Performance
+
             </h2>
 
+
             <p className="mt-0.5 text-xs text-slate-400">
+
               Your store metrics
+
             </p>
 
           </div>
+
 
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
 
@@ -1045,11 +1630,14 @@ const Dashboard = () => {
               <div className="flex items-center justify-between">
 
                 <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
+
                   <Icon
                     name="orders"
                     size={20}
                   />
+
                 </div>
+
 
                 <Icon
                   name="external"
@@ -1058,21 +1646,31 @@ const Dashboard = () => {
 
               </div>
 
+
               <p className="mt-5 text-xs font-semibold text-slate-400">
+
                 Total Orders
+
               </p>
 
+
               <p className="mt-1 text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">
+
                 {numberFormat(
                   totalOrders
                 )}
+
               </p>
 
+
               <p className="mt-1 text-[11px] text-slate-400">
+
                 All orders received
+
               </p>
 
             </button>
+
 
             {/* SALES */}
 
@@ -1089,11 +1687,14 @@ const Dashboard = () => {
               <div className="flex items-center justify-between">
 
                 <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-violet-50 text-violet-600">
+
                   <Icon
                     name="chart"
                     size={20}
                   />
+
                 </div>
+
 
                 <Icon
                   name="external"
@@ -1102,21 +1703,31 @@ const Dashboard = () => {
 
               </div>
 
+
               <p className="mt-5 text-xs font-semibold text-slate-400">
+
                 Total Sales
+
               </p>
 
+
               <p className="mt-1 text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">
+
                 {numberFormat(
                   totalSales
                 )}
+
               </p>
 
+
               <p className="mt-1 text-[11px] text-slate-400">
+
                 Items sold
+
               </p>
 
             </button>
+
 
             {/* REVENUE */}
 
@@ -1133,11 +1744,14 @@ const Dashboard = () => {
               <div className="flex items-center justify-between">
 
                 <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+
                   <Icon
                     name="wallet"
                     size={20}
                   />
+
                 </div>
+
 
                 <Icon
                   name="external"
@@ -1146,21 +1760,31 @@ const Dashboard = () => {
 
               </div>
 
+
               <p className="mt-5 text-xs font-semibold text-slate-400">
+
                 Revenue
+
               </p>
 
+
               <p className="mt-1 break-all text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">
+
                 {currencyFormat(
                   totalRevenue
                 )}
+
               </p>
 
+
               <p className="mt-1 text-[11px] text-slate-400">
+
                 Before commission
+
               </p>
 
             </button>
+
 
             {/* PRODUCTS */}
 
@@ -1177,11 +1801,14 @@ const Dashboard = () => {
               <div className="flex items-center justify-between">
 
                 <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-orange-50 text-orange-600">
+
                   <Icon
                     name="package"
                     size={20}
                   />
+
                 </div>
+
 
                 <Icon
                   name="external"
@@ -1190,18 +1817,27 @@ const Dashboard = () => {
 
               </div>
 
+
               <p className="mt-5 text-xs font-semibold text-slate-400">
+
                 Products
+
               </p>
 
+
               <p className="mt-1 text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">
+
                 {numberFormat(
                   totalProducts
                 )}
+
               </p>
 
+
               <p className="mt-1 text-[11px] text-slate-400">
+
                 Products in store
+
               </p>
 
             </button>
@@ -1209,6 +1845,7 @@ const Dashboard = () => {
           </div>
 
         </section>
+
 
         {/* =================================================
             REVENUE + INVENTORY
@@ -1225,55 +1862,76 @@ const Dashboard = () => {
               <div>
 
                 <p className="text-xs font-medium text-slate-400">
+
                   Revenue overview
+
                 </p>
 
+
                 <p className="mt-2 text-3xl font-bold tracking-tight">
+
                   {currencyFormat(
                     totalRevenue
                   )}
+
                 </p>
 
               </div>
 
+
               <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10">
+
                 <Icon
                   name="chart"
                   size={20}
                 />
+
               </div>
 
             </div>
+
 
             <div className="mt-7 grid grid-cols-2 gap-4">
 
               <div className="rounded-2xl bg-white/5 p-4">
 
                 <p className="text-[11px] text-slate-500">
+
                   Commission
+
                 </p>
 
+
                 <p className="mt-1 text-sm font-bold text-white">
+
                   {currencyFormat(
                     commission
                   )}
+
                 </p>
 
               </div>
 
+
               <div className="rounded-2xl bg-white/5 p-4">
 
                 <p className="text-[11px] text-slate-500">
+
                   Rate
+
                 </p>
 
+
                 <p className="mt-1 text-sm font-bold text-white">
+
                   {commissionRate}%
+
                 </p>
 
               </div>
 
             </div>
+
 
             <div className="mt-5">
 
@@ -1288,6 +1946,7 @@ const Dashboard = () => {
                 </span>
 
               </div>
+
 
               <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
 
@@ -1310,6 +1969,7 @@ const Dashboard = () => {
 
           </article>
 
+
           {/* INVENTORY */}
 
           <article className="rounded-[24px] border border-slate-100 bg-white p-5 shadow-[0_2px_14px_rgba(15,23,42,0.04)] sm:p-6">
@@ -1319,23 +1979,32 @@ const Dashboard = () => {
               <div>
 
                 <p className="text-xs font-medium text-slate-400">
+
                   Inventory health
+
                 </p>
 
+
                 <h2 className="mt-1 text-xl font-bold text-slate-950">
+
                   Stock overview
+
                 </h2>
 
               </div>
 
+
               <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-600">
+
                 <Icon
                   name="box"
                   size={20}
                 />
+
               </div>
 
             </div>
+
 
             <div className="mt-6 grid grid-cols-2 gap-3">
 
@@ -1350,20 +2019,29 @@ const Dashboard = () => {
               >
 
                 <p className="text-xs font-semibold text-amber-700">
+
                   Low stock
+
                 </p>
 
+
                 <p className="mt-1 text-3xl font-bold text-slate-950">
+
                   {numberFormat(
                     lowStock
                   )}
+
                 </p>
 
+
                 <p className="mt-1 text-[11px] text-amber-700/70">
+
                   Products need attention
+
                 </p>
 
               </button>
+
 
               <button
                 type="button"
@@ -1376,17 +2054,25 @@ const Dashboard = () => {
               >
 
                 <p className="text-xs font-semibold text-rose-700">
+
                   Out of stock
+
                 </p>
 
+
                 <p className="mt-1 text-3xl font-bold text-slate-950">
+
                   {numberFormat(
                     outOfStock
                   )}
+
                 </p>
 
+
                 <p className="mt-1 text-[11px] text-rose-700/70">
+
                   Products unavailable
+
                 </p>
 
               </button>
@@ -1396,6 +2082,7 @@ const Dashboard = () => {
           </article>
 
         </section>
+
 
         {/* =================================================
             ORDERS
@@ -1408,14 +2095,20 @@ const Dashboard = () => {
             <div>
 
               <h2 className="text-base font-bold text-slate-950 sm:text-lg">
+
                 Order status
+
               </h2>
 
+
               <p className="mt-1 text-xs text-slate-400">
+
                 Current order pipeline
+
               </p>
 
             </div>
+
 
             <button
               type="button"
@@ -1426,19 +2119,24 @@ const Dashboard = () => {
               }
               className="hidden items-center gap-1 text-xs font-bold text-slate-600 hover:text-slate-950 sm:flex"
             >
+
               View orders
+
               <Icon
                 name="arrow"
                 size={14}
               />
+
             </button>
 
           </div>
+
 
           <div className="grid grid-cols-2 gap-2 p-3 sm:grid-cols-4 sm:gap-3 sm:p-5 lg:grid-cols-8">
 
             {orderStatuses.map(
               (status) => (
+
                 <div
                   key={
                     status.label
@@ -1447,20 +2145,27 @@ const Dashboard = () => {
                 >
 
                   <p className="truncate text-[10px] font-bold uppercase tracking-wider text-slate-500">
+
                     {status.label}
+
                   </p>
 
+
                   <p className="mt-2 text-2xl font-bold tracking-tight text-slate-950">
+
                     {numberFormat(
                       status.value
                     )}
+
                   </p>
 
                 </div>
+
               )
             )}
 
           </div>
+
 
           <div className="border-t border-slate-100 p-3 sm:hidden">
 
@@ -1473,20 +2178,20 @@ const Dashboard = () => {
               }
               className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-slate-50 text-xs font-bold text-slate-700"
             >
+
               View all orders
+
               <Icon
                 name="arrow"
                 size={14}
               />
+
             </button>
 
           </div>
 
         </section>
 
-        {/* =================================================
-            RESPONSIVE FOOTER SPACE
-        ================================================= */}
 
         <div className="h-2" />
 
@@ -1494,6 +2199,8 @@ const Dashboard = () => {
 
     </main>
   );
+
 };
+
 
 export default Dashboard;

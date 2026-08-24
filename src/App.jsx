@@ -77,7 +77,7 @@ import Settings from "./pages/seller/Settings";
    PROTECTION
 ================================ */
 
-import ProtectedRoute from "./routes/ProtectedRoute";
+import ProtectRoute from "./routes/ProtectedRoute";
 
 
 function App() {
@@ -143,27 +143,27 @@ function App() {
         <Route
           path="/seller/complete-profile"
           element={
-            <ProtectedRoute>
+            <ProtectRoute role="seller">
               <CompleteSellerProfile />
-            </ProtectedRoute>
+            </ProtectRoute>
           }
         />
 
         <Route
           path="/seller/upload-documents"
           element={
-            <ProtectedRoute>
+            <ProtectRoute role="seller">
               <UploadSellerDocuments />
-            </ProtectedRoute>
+            </ProtectRoute>
           }
         />
 
         <Route
           path="/seller/pending"
           element={
-            <ProtectedRoute>
+            <ProtectRoute role="seller">
               <PendingApproval />
-            </ProtectedRoute>
+            </ProtectRoute>
           }
         />
 
@@ -175,9 +175,9 @@ function App() {
         <Route
           path="/seller"
           element={
-            <ProtectedRoute>
+            <ProtectRoute role="seller">
               <SellerLayout />
-            </ProtectedRoute>
+            </ProtectRoute>
           }
         >
 
