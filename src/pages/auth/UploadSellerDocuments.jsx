@@ -120,60 +120,456 @@ function UploadSellerDocuments() {
   |--------------------------------------------------------------------------
   */
 
-  useEffect(() => {
+ useEffect(() => {
+  let mounted = true;
+
+  const loadSellerStatus = async () => {
+
     try {
-      const storedUser =
-        localStorage.getItem("user");
 
-      if (!storedUser) {
-        navigate("/login", {
-          replace: true,
-        });
+      const token =
+        localStorage.getItem("token");
 
-        return;
-      }
+      /* =====================================================
+         NO TOKEN
+      ===================================================== */
 
-      const parsedUser =
-        JSON.parse(storedUser);
+      if (!token) {
 
-      if (parsedUser?.role !== "seller") {
-        navigate("/", {
-          replace: true,
-        });
+        navigate(
+          "/login",
+          {
+            replace: true,
+          }
+        );
 
         return;
       }
+
+
+      /* =====================================================
+         ALWAYS GET FRESH DATABASE DATA
+      ===================================================== */
+
+      const response =
+        await api.get(
+          "/auth/me"
+        );
+
+
+      const currentUser =
+        response.data?.user;
+
+
+      console.log(
+        "======================================"
+      );
+
+      console.log(
+        "📋 SELLER KYC PAGE CHECK"
+      );
+
+      console.log(
+        "User:",
+        currentUser
+      );
+
+      console.log(
+        "Role:",
+        currentUser?.role
+      );
+
+      console.log(
+        "Seller Status:",
+        currentUser?.sellerStatus
+      );
+
+      console.log(
+        "KYC Status:",
+        currentUser?.sellerVerificationStatus
+      );
+
+      console.log(
+        "Raw verification:",
+        currentUser?.sellerInfo?.verification
+      );
+
+      console.log(
+        "KYC Documents:",
+        currentUser?.sellerInfo?.kyc
+      );
+
+      console.log(
+        "======================================"
+      );
+
+
+      if (!mounted) {
+        return;
+      }
+
+
+      /* =====================================================
+         ROLE CHECK
+      ===================================================== */
 
       if (
-        parsedUser?.sellerStatus ===
-          "blocked" ||
-        parsedUser?.sellerStatus ===
-          "suspended"
+        currentUser?.role !==
+        "seller"
       ) {
-        navigate("/seller/dashboard", {
-          replace: true,
-        });
+
+        navigate(
+          "/",
+          {
+            replace: true,
+          }
+        );
 
         return;
       }
 
-      setUser(parsedUser);
+
+      /* =====================================================
+         SELLER APPLICATION CHECK
+      ===================================================== */
+
+      if (
+        currentUser?.sellerStatus ===
+        "pending"
+      ) {
+
+        navigate(
+          "/seller/pending",
+          {
+            replace: true,
+          }
+        );
+
+        return;
+      }
+
+
+      /* =====================================================
+         GET KYC STATUS
+      ===================================================== */
+
+      const kycStatus =
+        currentUser
+          ?.sellerVerificationStatus ||
+        currentUser
+          ?.sellerInfo
+          ?.verification
+          ?.status ||
+        "pending";
+
+
+      /* =====================================================
+         GET KYC DOCUMENTS
+      ===================================================== */
+
+      const kyc =
+        currentUser
+          ?.sellerInfo
+          ?.kyc;
+
+
+      const hasAadhaar =
+        Boolean(
+          kyc?.aadhaar?.frontImage ||
+          kyc?.aadhaar?.backImage
+        );
+
+
+      const hasPan =
+        Boolean(
+          kyc?.pan?.image
+        );
+
+
+      const hasBankProof =
+        Boolean(
+          kyc?.bankProof?.image
+        );
+
+
+      const hasAnyKycDocument =
+        hasAadhaar ||
+        hasPan ||
+        hasBankProof;
+
+
+      console.log(
+        "🔎 KYC STATUS:",
+        kycStatus
+      );
+
+      console.log(
+        "Aadhaar:",
+        hasAadhaar
+      );
+
+      console.log(
+        "PAN:",
+        hasPan
+      );
+
+      console.log(
+        "Bank Proof:",
+        hasBankProof
+      );
+
+      console.log(
+        "Has KYC:",
+        hasAnyKycDocument
+      );
+
+
+      /* =====================================================
+         KYC APPROVED
+         
+         NEVER SHOW UPLOAD PAGE AGAIN
+      ===================================================== */
+
+      if (
+        kycStatus ===
+        "approved"
+      ) {
+
+        console.log(
+          "✅ KYC APPROVED"
+        );
+
+        console.log(
+          "🚀 REDIRECT → DASHBOARD"
+        );
+
+
+        localStorage.setItem(
+          "user",
+          JSON.stringify(
+            currentUser
+          )
+        );
+
+
+        navigate(
+          "/seller/dashboard",
+          {
+            replace: true,
+          }
+        );
+
+        return;
+      }
+
+
+      /* =====================================================
+         KYC ALREADY SUBMITTED
+         
+         Documents exist but admin hasn't approved yet.
+
+         Don't show upload page again.
+         Let the seller continue to the dashboard.
+      ===================================================== */
+
+      if (
+        hasAnyKycDocument &&
+        kycStatus === "pending"
+      ) {
+
+        console.log(
+          "📄 KYC DOCUMENTS ALREADY SUBMITTED"
+        );
+
+        console.log(
+          "⏳ KYC IS UNDER REVIEW"
+        );
+
+        console.log(
+          "🚀 REDIRECT → DASHBOARD"
+        );
+
+
+        localStorage.setItem(
+          "user",
+          JSON.stringify(
+            currentUser
+          )
+        );
+
+
+        navigate(
+          "/seller/dashboard",
+          {
+            replace: true,
+            state: {
+              kycSubmitted: true,
+              verificationPending: true,
+            },
+          }
+        );
+
+        return;
+      }
+
+
+      /* =====================================================
+         KYC REJECTED
+         
+         Allow upload again.
+      ===================================================== */
+
+      if (
+        kycStatus ===
+        "rejected"
+      ) {
+
+        console.log(
+          "❌ KYC REJECTED"
+        );
+
+        console.log(
+          "✅ SHOW UPLOAD PAGE FOR RESUBMISSION"
+        );
+
+
+        localStorage.setItem(
+          "user",
+          JSON.stringify(
+            currentUser
+          )
+        );
+
+
+        setUser(
+          currentUser
+        );
+
+        return;
+      }
+
+
+      /* =====================================================
+         NO KYC DOCUMENTS
+         
+         Show upload page.
+      ===================================================== */
+
+      console.log(
+        "📤 NO KYC DOCUMENTS FOUND"
+      );
+
+      console.log(
+        "✅ SHOW UPLOAD PAGE"
+      );
+
+
+      localStorage.setItem(
+        "user",
+        JSON.stringify(
+          currentUser
+        )
+      );
+
+
+      setUser(
+        currentUser
+      );
+
     } catch (error) {
+
       console.error(
-        "Load seller verification user error:",
+        "❌ Seller KYC status check failed:",
         error
       );
 
-      localStorage.removeItem("user");
-      localStorage.removeItem("token");
-      localStorage.removeItem("role");
 
-      navigate("/login", {
-        replace: true,
-      });
+      if (
+        error?.response?.status ===
+        401
+      ) {
+
+        localStorage.removeItem(
+          "token"
+        );
+
+        localStorage.removeItem(
+          "user"
+        );
+
+
+        navigate(
+          "/login",
+          {
+            replace: true,
+          }
+        );
+
+        return;
+      }
+
+
+      /* fallback to cached user */
+
+      const storedUser =
+        localStorage.getItem(
+          "user"
+        );
+
+
+      if (storedUser) {
+
+        try {
+
+          const cachedUser =
+            JSON.parse(
+              storedUser
+            );
+
+
+          if (
+            cachedUser?.role ===
+            "seller"
+          ) {
+
+            setUser(
+              cachedUser
+            );
+
+          }
+
+        } catch (
+          parseError
+        ) {
+
+          console.error(
+            "❌ Cached user parse error:",
+            parseError
+          );
+
+        }
+
+      }
+
+    } finally {
+
+      if (mounted) {
+        setLoading(false);
+      }
+
     }
-  }, [navigate]);
 
+  };
+
+
+  loadSellerStatus();
+
+
+  return () => {
+    mounted = false;
+  };
+
+}, [navigate]);
   /*
   |--------------------------------------------------------------------------
   | AOS

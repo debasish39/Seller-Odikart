@@ -18,6 +18,7 @@ import VerifyResetOTP from "./pages/auth/VerifyResetOTP";
 import ResetPassword from "./pages/auth/ResetPassword";
 import PrivacyPolicy from "./pages/PrivacyPolicy.jsx";
 
+
 /* ================================
    SELLER ONBOARDING
 ================================ */
@@ -25,6 +26,7 @@ import PrivacyPolicy from "./pages/PrivacyPolicy.jsx";
 import CompleteSellerProfile from "./pages/auth/CompleteSellerProfile";
 import UploadSellerDocuments from "./pages/auth/UploadSellerDocuments";
 import PendingApproval from "./pages/seller/PendingApproval";
+
 
 /* ================================
    SELLER
@@ -40,11 +42,6 @@ import ProductStock from "./pages/seller/products/ProductStock";
 import AddProduct from "./pages/seller/AddProduct";
 import NotFound from "./pages/NotFound.jsx";
 
-/* ================================
-   SELLER VERIFICATION PROTECTION
-================================ */
-
-import VerifiedSellerRoute from "./components/seller/VerifiedSellerRoute";
 
 /* ================================
    SELLER ORDERS
@@ -53,11 +50,13 @@ import VerifiedSellerRoute from "./components/seller/VerifiedSellerRoute";
 import Orders from "./pages/orders/Orders";
 import SellerOrderDetails from "./pages/orders/SellerOrderDetails";
 
+
 /* ================================
    SELLER ANALYTICS
 ================================ */
 
 import Analytics from "./pages/seller/Analytics";
+
 
 /* ================================
    SELLER WALLET
@@ -67,11 +66,13 @@ import Wallet from "./pages/seller/wallet/Wallet";
 import Transactions from "./pages/seller/wallet/Transactions";
 import Withdraw from "./pages/seller/wallet/Withdraw";
 
+
 /* ================================
    SELLER SETTINGS
 ================================ */
 
 import Settings from "./pages/seller/Settings";
+
 
 /* ================================
    PROTECTION
@@ -81,225 +82,338 @@ import ProtectRoute from "./routes/ProtectedRoute";
 
 
 function App() {
+
   return (
+
     <BrowserRouter>
 
       <Routes>
 
-        {/* =====================================
+        {/* =====================================================
             AUTH ROUTES
-        ===================================== */}
+        ===================================================== */}
 
         <Route
           path="/"
-          element={<Login />}
+          element={
+            <Login />
+          }
         />
 
         <Route
           path="/login"
-          element={<Login />}
+          element={
+            <Login />
+          }
         />
 
         <Route
           path="/register"
-          element={<Register />}
+          element={
+            <Register />
+          }
         />
 
         <Route
           path="/verify-signup-otp"
-          element={<VerifySignupOTP />}
+          element={
+            <VerifySignupOTP />
+          }
         />
 
         <Route
           path="/login-otp"
-          element={<LoginOTP />}
+          element={
+            <LoginOTP />
+          }
         />
 
         <Route
           path="/verify-login-otp"
-          element={<VerifyLoginOTP />}
+          element={
+            <VerifyLoginOTP />
+          }
         />
 
         <Route
           path="/forgot-password"
-          element={<ForgotPassword />}
+          element={
+            <ForgotPassword />
+          }
         />
 
         <Route
           path="/verify-reset-otp"
-          element={<VerifyResetOTP />}
+          element={
+            <VerifyResetOTP />
+          }
         />
-<Route path="/privacy-policy" element={<PrivacyPolicy />} />
+
         <Route
           path="/reset-password"
-          element={<ResetPassword />}
+          element={
+            <ResetPassword />
+          }
+        />
+
+        <Route
+          path="/privacy-policy"
+          element={
+            <PrivacyPolicy />
+          }
         />
 
 
-        {/* =====================================
+        {/* =====================================================
             SELLER ONBOARDING
-        ===================================== */}
+
+            IMPORTANT:
+            These routes require:
+              - Login
+              - Seller role
+              - Seller application approved
+
+            They DO NOT require KYC approval.
+        ===================================================== */}
 
         <Route
           path="/seller/complete-profile"
           element={
-            <ProtectRoute role="seller">
+            <ProtectRoute
+              role="seller"
+              requireKyc={false}
+            >
               <CompleteSellerProfile />
             </ProtectRoute>
           }
         />
 
+
         <Route
           path="/seller/upload-documents"
           element={
-            <ProtectRoute role="seller">
+            <ProtectRoute
+              role="seller"
+              requireKyc={false}
+            >
               <UploadSellerDocuments />
             </ProtectRoute>
           }
         />
 
-        <Route
-          path="/seller/pending"
-          element={
-            <ProtectRoute role="seller">
-              <PendingApproval />
-            </ProtectRoute>
-          }
-        />
 
+        {/* =====================================================
+            SELLER PENDING
 
-        {/* =====================================
-            SELLER APPLICATION
-        ===================================== */}
+            This page is for seller application approval.
+
+            KYC is not required here because a pending seller
+            may need to see this page.
+        ===================================================== */}
+<Route
+  path="/seller/pending"
+  element={
+    <ProtectRoute
+      role="seller"
+      allowPendingSeller={true}
+      requireKyc={false}
+    >
+      <PendingApproval />
+    </ProtectRoute>
+  }
+/>
+
+        {/* =====================================================
+            SELLER PORTAL
+
+            IMPORTANT:
+            requireKyc={true}
+
+            Therefore:
+              seller approved + KYC approved
+                    → allowed
+
+              seller approved + KYC pending
+                    → /seller/upload-documents
+
+              seller approved + KYC rejected
+                    → /seller/upload-documents
+
+              seller not approved
+                    → /seller/pending
+        ===================================================== */}
 
         <Route
           path="/seller"
           element={
-            <ProtectRoute role="seller">
+            <ProtectRoute
+              role="seller"
+              requireKyc={true}
+            >
               <SellerLayout />
             </ProtectRoute>
           }
         >
 
-          {/* =====================================
+          {/* =================================================
               DASHBOARD
-          ===================================== */}
+          ================================================= */}
 
           <Route
             path="dashboard"
-            element={<Dashboard />}
+            element={
+              <Dashboard />
+            }
           />
 
 
-          {/* =====================================
+          {/* =================================================
               PRODUCTS
-          ===================================== */}
+          ================================================= */}
 
           <Route
             path="products"
-            element={<Products />}
+            element={
+              <Products />
+            }
           />
 
-          {/* =====================================
+
+          {/* =================================================
               ADD PRODUCT
-              VERIFIED SELLER ONLY
-          ===================================== */}
+
+              Backend should ALSO verify seller + KYC.
+          ================================================= */}
 
           <Route
             path="products/add"
             element={
-              <VerifiedSellerRoute>
-                <AddProduct />
-              </VerifiedSellerRoute>
+              <AddProduct />
             }
           />
 
-          {/* =====================================
+
+          {/* =================================================
               PRODUCT DETAILS
-          ===================================== */}
+          ================================================= */}
 
           <Route
             path="products/:id"
-            element={<ProductDetails />}
+            element={
+              <ProductDetails />
+            }
           />
 
-          {/* =====================================
+
+          {/* =================================================
               EDIT PRODUCT
-          ===================================== */}
+          ================================================= */}
 
           <Route
             path="products/:id/edit"
-            element={<EditProduct />}
+            element={
+              <EditProduct />
+            }
           />
 
-          {/* =====================================
-              PRODUCT STOCK
-          ===================================== */}
+
+          {/* =================================================
+              STOCK
+          ================================================= */}
 
           <Route
             path="products/:id/stock"
-            element={<ProductStock />}
+            element={
+              <ProductStock />
+            }
           />
 
 
-          {/* =====================================
-              SELLER ORDERS
-          ===================================== */}
+          {/* =================================================
+              ORDERS
+          ================================================= */}
 
           <Route
             path="orders"
-            element={<Orders />}
+            element={
+              <Orders />
+            }
           />
+
 
           <Route
             path="orders/:id"
-            element={<SellerOrderDetails />}
+            element={
+              <SellerOrderDetails />
+            }
           />
 
 
-          {/* =====================================
+          {/* =================================================
               ANALYTICS
-          ===================================== */}
+          ================================================= */}
 
           <Route
             path="analytics"
-            element={<Analytics />}
+            element={
+              <Analytics />
+            }
           />
 
 
-          {/* =====================================
+          {/* =================================================
               WALLET
-          ===================================== */}
+          ================================================= */}
 
           <Route
             path="wallet"
-            element={<Wallet />}
+            element={
+              <Wallet />
+            }
           />
+
 
           <Route
             path="wallet/transactions"
-            element={<Transactions />}
+            element={
+              <Transactions />
+            }
           />
+
 
           <Route
             path="wallet/withdraw"
-            element={<Withdraw />}
+            element={
+              <Withdraw />
+            }
           />
 
 
-          {/* =====================================
+          {/* =================================================
               SETTINGS
-          ===================================== */}
+          ================================================= */}
 
           <Route
             path="settings"
-            element={<Settings />}
+            element={
+              <Settings />
+            }
           />
 
         </Route>
 
-      {/* 404 route - MUST be last */}
-      <Route path="*" element={<NotFound />} />
+
+        {/* =====================================================
+            404
+        ===================================================== */}
+
+        <Route
+          path="*"
+          element={
+            <NotFound />
+          }
+        />
+
       </Routes>
 
     </BrowserRouter>

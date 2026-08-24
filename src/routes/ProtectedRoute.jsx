@@ -5,6 +5,7 @@ import {
 
 import {
   Navigate,
+  useLocation,
 } from "react-router-dom";
 
 import api from "../services/api";
@@ -12,123 +13,264 @@ import api from "../services/api";
 
 function ProtectedRoute({
   children,
+
   role,
+
+  requireKyc = false,
+
+  /*
+   * Used only for /seller/pending
+   *
+   * A logged-in seller can access this page
+   * even when sellerStatus is pending/rejected.
+   */
+  allowPendingSeller = false,
 }) {
 
-  const [loading, setLoading] =
-    useState(true);
+  const location =
+    useLocation();
 
-  const [user, setUser] =
-    useState(null);
 
+  const [
+    loading,
+    setLoading,
+  ] = useState(true);
+
+
+  const [
+    user,
+    setUser,
+  ] = useState(null);
+
+
+  /* =====================================================
+     FETCH CURRENT USER
+  ===================================================== */
 
   useEffect(() => {
 
     const token =
-      localStorage.getItem("token");
+      localStorage.getItem(
+        "token"
+      );
+
+
+    console.log(
+      "================================"
+    );
+
+    console.log(
+      "🔐 PROTECTED ROUTE"
+    );
+
+    console.log(
+      "Path:",
+      location.pathname
+    );
+
+    console.log(
+      "Token exists:",
+      Boolean(token)
+    );
+
+    console.log(
+      "Required role:",
+      role
+    );
+
+    console.log(
+      "Require KYC:",
+      requireKyc
+    );
+
+    console.log(
+      "Allow pending seller:",
+      allowPendingSeller
+    );
+
+    console.log(
+      "================================"
+    );
 
 
     if (!token) {
 
+      setUser(null);
+
       setLoading(false);
+
       return;
 
     }
 
 
-    const fetchUser = async () => {
+    const fetchUser =
+      async () => {
 
-      try {
+        try {
 
-        const response =
-          await api.get("/auth/me");
-
-
-        const currentUser =
-          response.data?.user;
-
-
-        console.log(
-          "================================"
-        );
-
-        console.log(
-          "🔐 PROTECTED ROUTE"
-        );
-
-        console.log(
-          "Current User:",
-          currentUser
-        );
-
-        console.log(
-          "Role:",
-          currentUser?.role
-        );
-
-        console.log(
-          "Seller Status:",
-          currentUser?.sellerStatus
-        );
-
-        console.log(
-          "Seller Verification:",
-          currentUser?.sellerVerificationStatus
-        );
-
-        console.log(
-          "Active Mode:",
-          currentUser?.activeMode
-        );
-
-        console.log(
-          "================================"
-        );
+          const response =
+            await api.get(
+              "/auth/me"
+            );
 
 
-        setUser(currentUser);
+          const currentUser =
+            response.data?.user;
 
-      } catch (error) {
 
-        console.error(
-          "❌ /auth/me failed:",
-          error
-        );
+          console.log(
+            "========== /auth/me =========="
+          );
 
-        localStorage.removeItem(
-          "token"
-        );
+          console.log(
+            "Current user:",
+            currentUser
+          );
 
-        setUser(null);
+          console.log(
+            "Role:",
+            currentUser?.role
+          );
 
-      } finally {
+          console.log(
+            "Seller status:",
+            currentUser?.sellerStatus
+          );
 
-        setLoading(false);
+          console.log(
+            "KYC status:",
+            currentUser?.sellerVerificationStatus
+          );
 
-      }
+          console.log(
+            "Active mode:",
+            currentUser?.activeMode
+          );
 
-    };
+          console.log(
+            "==============================="
+          );
+
+
+          if (!currentUser) {
+
+            throw new Error(
+              "User information was not returned"
+            );
+
+          }
+
+
+          localStorage.setItem(
+            "user",
+            JSON.stringify(
+              currentUser
+            )
+          );
+
+
+          setUser(
+            currentUser
+          );
+
+
+        } catch (error) {
+
+          console.error(
+            "❌ /auth/me failed:",
+            error
+          );
+
+
+          if (
+            error?.response?.status === 401 ||
+            error?.response?.status === 403
+          ) {
+
+            localStorage.removeItem(
+              "token"
+            );
+
+            localStorage.removeItem(
+              "user"
+            );
+
+            setUser(null);
+
+          }
+
+        } finally {
+
+          setLoading(false);
+
+        }
+
+      };
 
 
     fetchUser();
 
-  }, []);
+  }, [
+    location.pathname,
+    role,
+    requireKyc,
+    allowPendingSeller,
+  ]);
 
 
-  /*
-  |--------------------------------------------------------------------------
-  | LOADING
-  |--------------------------------------------------------------------------
-  */
+  /* =====================================================
+     LOADING
+  ===================================================== */
 
   if (loading) {
 
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="
+        flex
+        min-h-screen
+        items-center
+        justify-center
+        bg-[#f7f8fa]
+      ">
 
-        <h2>
-          Checking authentication...
-        </h2>
+        <div className="
+          rounded-2xl
+          bg-white
+          px-6
+          py-5
+          shadow-sm
+        ">
+
+          <div className="
+            flex
+            items-center
+            gap-3
+          ">
+
+            <span className="
+              h-5
+              w-5
+              animate-spin
+              rounded-full
+              border-2
+              border-slate-200
+              border-t-slate-900
+            " />
+
+            <span className="
+              text-sm
+              font-semibold
+              text-slate-600
+            ">
+
+              Checking authentication...
+
+            </span>
+
+          </div>
+
+        </div>
 
       </div>
     );
@@ -136,11 +278,9 @@ function ProtectedRoute({
   }
 
 
-  /*
-  |--------------------------------------------------------------------------
-  | NO USER
-  |--------------------------------------------------------------------------
-  */
+  /* =====================================================
+     NOT LOGGED IN
+  ===================================================== */
 
   if (!user) {
 
@@ -148,17 +288,19 @@ function ProtectedRoute({
       <Navigate
         to="/"
         replace
+        state={{
+          from:
+            location.pathname,
+        }}
       />
     );
 
   }
 
 
-  /*
-  |--------------------------------------------------------------------------
-  | ACCOUNT BLOCKED
-  |--------------------------------------------------------------------------
-  */
+  /* =====================================================
+     BLOCKED
+  ===================================================== */
 
   if (user.isBlocked) {
 
@@ -166,6 +308,11 @@ function ProtectedRoute({
       "token"
     );
 
+    localStorage.removeItem(
+      "user"
+    );
+
+
     return (
       <Navigate
         to="/"
@@ -176,11 +323,9 @@ function ProtectedRoute({
   }
 
 
-  /*
-  |--------------------------------------------------------------------------
-  | ACCOUNT DELETED
-  |--------------------------------------------------------------------------
-  */
+  /* =====================================================
+     DELETED
+  ===================================================== */
 
   if (user.isDeleted) {
 
@@ -188,6 +333,11 @@ function ProtectedRoute({
       "token"
     );
 
+    localStorage.removeItem(
+      "user"
+    );
+
+
     return (
       <Navigate
         to="/"
@@ -198,11 +348,9 @@ function ProtectedRoute({
   }
 
 
-  /*
-  |--------------------------------------------------------------------------
-  | ROLE CHECK
-  |--------------------------------------------------------------------------
-  */
+  /* =====================================================
+     ROLE
+  ===================================================== */
 
   if (
     role &&
@@ -210,9 +358,13 @@ function ProtectedRoute({
   ) {
 
     console.warn(
-      "❌ Wrong role:",
-      user.role
+      "❌ WRONG ROLE",
+      {
+        expected: role,
+        actual: user.role,
+      }
     );
+
 
     return (
       <Navigate
@@ -224,22 +376,56 @@ function ProtectedRoute({
   }
 
 
-  /*
-  |--------------------------------------------------------------------------
-  | SELLER CHECK
-  |--------------------------------------------------------------------------
-  */
+  /* =====================================================
+     SELLER
+  ===================================================== */
 
-  if (role === "seller") {
+  if (
+    role === "seller"
+  ) {
 
     console.log(
-      "🏪 SELLER AUTHORIZATION"
+      "🏪 SELLER ROUTE CHECK"
+    );
+
+
+    console.log(
+      "Seller status:",
+      user.sellerStatus
     );
 
 
     /*
-     * Seller application
-     */
+    |--------------------------------------------------------------------------
+    | PENDING SELLER PAGE
+    |
+    | This route is allowed to render for a seller
+    | whose application is not approved yet.
+    |--------------------------------------------------------------------------
+    */
+
+    if (
+      allowPendingSeller
+    ) {
+
+      console.log(
+        "✅ Pending seller page allowed"
+      );
+
+
+      /*
+       * Do NOT run the normal seller approval
+       * redirect here.
+       */
+
+      return children;
+
+    }
+
+
+    /* ===================================================
+       NORMAL SELLER APPROVAL
+    =================================================== */
 
     if (
       user.sellerStatus !==
@@ -247,49 +433,89 @@ function ProtectedRoute({
     ) {
 
       console.warn(
-        "❌ Seller application:",
+        "❌ SELLER APPLICATION NOT APPROVED:",
         user.sellerStatus
       );
 
-      return (
-        <Navigate
-          to="/seller/pending"
-          replace
-        />
-      );
 
-    }
-
-
-    /*
-     * Seller KYC
-     */
-
-    if (
-      user.sellerVerificationStatus !==
-      "approved"
-    ) {
-
-      console.warn(
-        "❌ Seller KYC:",
-        user.sellerVerificationStatus
-      );
-
-      return (
-        <Navigate
-          to="/seller/pending"
-          replace
-        />
-      );
+  
 
     }
 
 
     console.log(
-      "✅ SELLER ACCESS APPROVED"
+      "✅ SELLER APPLICATION APPROVED"
     );
 
+
+    /* ===================================================
+       KYC
+    =================================================== */
+
+    if (
+      requireKyc
+    ) {
+
+      const kycStatus =
+        user.sellerVerificationStatus ||
+        user.sellerInfo
+          ?.verification
+          ?.status ||
+        "pending";
+
+
+      console.log(
+        "🔎 KYC CHECK"
+      );
+
+      console.log(
+        "KYC status:",
+        kycStatus
+      );
+
+
+      if (
+        kycStatus !==
+        "approved"
+      ) {
+
+        console.warn(
+          "❌ KYC NOT APPROVED"
+        );
+
+
+        return (
+          <Navigate
+            to="/seller/upload-documents"
+            replace
+            state={{
+              from:
+                location.pathname,
+
+              kycStatus,
+            }}
+          />
+        );
+
+      }
+
+
+      console.log(
+        "✅ KYC APPROVED"
+      );
+
+    }
+
   }
+
+
+  /* =====================================================
+     ACCESS GRANTED
+  ===================================================== */
+
+  console.log(
+    "✅ PROTECTED ROUTE ACCESS GRANTED"
+  );
 
 
   return children;

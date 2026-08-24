@@ -259,281 +259,253 @@ function Login() {
   };
 
 
-  /* =========================================================
-     SELLER LOGIN SUCCESS
-     
-     ONE TOKEN ONLY
-     
-     localStorage:
-       token
-       user
-  ========================================================= */
+/* =========================================================
+   SELLER LOGIN SUCCESS
 
-  const handleSellerLoginSuccess = (
-    token,
+   FLOW:
+
+   seller role?
+      ↓
+   seller approved?
+      ↓
+   KYC approved?
+      ├── YES → /seller/dashboard
+      └── NO  → /seller/upload-documents
+
+   Storage:
+   token
+   user
+========================================================= */
+
+const handleSellerLoginSuccess = (
+  token,
+  user
+) => {
+
+  console.log(
+    "======================================="
+  );
+
+  console.log(
+    "========== SELLER LOGIN CHECK =========="
+  );
+
+  console.log(
+    "TOKEN RECEIVED:",
+    Boolean(token)
+  );
+
+  console.log(
+    "TOKEN LENGTH:",
+    token?.length || 0
+  );
+
+  console.log(
+    "USER:",
     user
-  ) => {
+  );
 
-    console.log(
-      "========== SELLER LOGIN CHECK =========="
+  console.log(
+    "======================================="
+  );
+
+
+  /* =====================================================
+     TOKEN CHECK
+  ===================================================== */
+
+  if (!token) {
+
+    setServerError(
+      "Authentication token was not received."
     );
 
-    console.log(
-      "TOKEN RECEIVED:",
-      Boolean(token)
+    return false;
+  }
+
+
+  /* =====================================================
+     USER CHECK
+  ===================================================== */
+
+  if (!user) {
+
+    setServerError(
+      "Unable to retrieve your account information."
     );
 
-    console.log(
-      "TOKEN LENGTH:",
-      token?.length
+    return false;
+  }
+
+
+  /* =====================================================
+     ACCOUNT STATUS
+  ===================================================== */
+
+  if (user.isBlocked) {
+
+    setServerError(
+      "Your account has been blocked. Please contact support."
     );
 
-    console.log(
-      "USER:",
-      user
+    return false;
+  }
+
+
+  if (user.isDeleted) {
+
+    setServerError(
+      "This account is no longer available."
     );
 
-
-    /* =====================================================
-       USER CHECK
-    ===================================================== */
-
-    if (!token) {
-
-      setServerError(
-        "Authentication token was not received."
-      );
-
-      return false;
-    }
+    return false;
+  }
 
 
-    if (!user) {
+  /* =====================================================
+     ROLE
+  ===================================================== */
 
-      setServerError(
-        "Unable to retrieve your account information."
-      );
-
-      return false;
-    }
+  const role =
+    user.role || "user";
 
 
-    /* =====================================================
-       ACCOUNT STATUS
-    ===================================================== */
+  /* =====================================================
+     SELLER STATUS
+  ===================================================== */
 
-    if (user.isBlocked) {
-
-      setServerError(
-        "Your account has been blocked. Please contact support."
-      );
-
-      return false;
-    }
+  const sellerStatus =
+    user.sellerStatus || "none";
 
 
-    if (user.isDeleted) {
+  /* =====================================================
+     KYC STATUS
 
-      setServerError(
-        "This account is no longer available."
-      );
+     Preferred API field:
+       sellerVerificationStatus
 
-      return false;
-    }
+     Backward-compatible fallback:
+       sellerInfo.verification.status
 
+  ===================================================== */
 
-    /* =====================================================
-       ROLE
-    ===================================================== */
-
-    const role =
-      user.role || "user";
-
-
-    /* =====================================================
-       SELLER STATUS
-    ===================================================== */
-
-    const sellerStatus =
-      user.sellerStatus || "none";
+  const sellerVerificationStatus =
+    user.sellerVerificationStatus ||
+    user.sellerInfo?.verification?.status ||
+    "pending";
 
 
-    /* =====================================================
-       KYC STATUS
-       
-       API:
-         sellerVerificationStatus
+  /* =====================================================
+     DEBUG
+  ===================================================== */
 
-       Fallback:
-         sellerInfo.verification.status
-    ===================================================== */
+  console.log(
+    "========== SELLER ACCESS =========="
+  );
 
-   const sellerVerificationStatus =
-  user.sellerInfo?.verification?.status ||
-  user.sellerVerificationStatus ||
-  "pending";
+  console.log(
+    "Role:",
+    role
+  );
 
-    /* =====================================================
-       DEBUG
-    ===================================================== */
+  console.log(
+    "Seller Status:",
+    sellerStatus
+  );
 
-    console.log(
-      "Role:",
-      role
-    );
+  console.log(
+    "KYC Status:",
+    sellerVerificationStatus
+  );
 
-    console.log(
-      "Seller Status:",
-      sellerStatus
-    );
-
-    console.log(
-      "KYC Verification Status:",
-      sellerVerificationStatus
-    );
-
-    console.log(
-      "========================================="
-    );
+  console.log(
+    "==================================="
+  );
 
 
-    /* =====================================================
-       ROLE CHECK
-    ===================================================== */
+  /* =====================================================
+     ROLE CHECK
+  ===================================================== */
 
-    if (role !== "seller") {
-
-      if (
-        sellerStatus === "pending"
-      ) {
-
-        setServerError(
-          "Your seller application is waiting for admin approval."
-        );
-
-      } else if (
-        sellerStatus === "rejected"
-      ) {
-
-        setServerError(
-          "Your seller application was rejected. Please contact support."
-        );
-
-      } else if (
-        sellerStatus === "suspended"
-      ) {
-
-        setServerError(
-          "Your seller account is suspended. Please contact support."
-        );
-
-      } else {
-
-        setServerError(
-          "This account is currently a customer account. Please apply to become a seller first."
-        );
-
-      }
-
-      return false;
-    }
-
-
-    /* =====================================================
-       SELLER APPROVAL
-    ===================================================== */
+  if (role !== "seller") {
 
     if (
-      sellerStatus !== "approved"
+      sellerStatus === "pending"
     ) {
-
-      const statusMessages = {
-
-        pending:
-          "Your seller account is waiting for admin approval.",
-
-        rejected:
-          "Your seller application was rejected. Please contact support.",
-
-        suspended:
-          "Your seller account has been suspended. Please contact support.",
-
-        blocked:
-          "Your seller account has been blocked. Please contact support.",
-
-        none:
-          "This account is not registered as a seller.",
-
-      };
-
 
       setServerError(
-        statusMessages[sellerStatus] ||
-        `Your seller account status is "${sellerStatus}".`
+        "Your seller application is waiting for admin approval."
       );
 
-      return false;
-    }
-
-
-    /* =====================================================
-       KYC APPROVAL
-    ===================================================== */
-
-    if (
-      sellerVerificationStatus !== "approved"
+    } else if (
+      sellerStatus === "rejected"
     ) {
 
-      if (
-        sellerVerificationStatus ===
-        "pending"
-      ) {
+      setServerError(
+        "Your seller application was rejected. Please contact support."
+      );
 
-        setServerError(
-          "Your seller account is approved, but KYC verification is still pending."
-        );
+    } else {
 
-      } else if (
-        sellerVerificationStatus ===
-        "rejected"
-      ) {
+      setServerError(
+        "This account is currently a customer account. Please apply to become a seller first."
+      );
 
-        setServerError(
-          "Your KYC verification was rejected. Please contact support."
-        );
-
-      } else {
-
-        setServerError(
-          "Your seller account is approved, but KYC verification has not been completed."
-        );
-
-      }
-
-      return false;
     }
 
-
-    /* =====================================================
-       EVERYTHING APPROVED
-    ===================================================== */
-
-    console.log(
-      "✅ SELLER ACCOUNT APPROVED"
-    );
-
-    console.log(
-      "✅ KYC VERIFIED"
-    );
-
-    console.log(
-      "✅ SELLER LOGIN ALLOWED"
-    );
+    return false;
+  }
 
 
-    /* =====================================================
-       REMOVE OLD SELLER STORAGE
-    ===================================================== */
+  /* =====================================================
+     SELLER APPROVAL CHECK
+  ===================================================== */
+
+ if (
+  sellerStatus !== "approved"
+) {
+
+  const statusMessages = {
+
+    pending:
+      "Your seller account is waiting for admin approval.",
+
+    rejected:
+      "Your seller application was rejected. Please contact support.",
+
+    suspended:
+      "Your seller account has been suspended. Please contact support.",
+
+    blocked:
+      "Your seller account has been blocked. Please contact support.",
+
+    none:
+      "This account is not registered as a seller.",
+
+  };
+
+
+  setServerError(
+    statusMessages[sellerStatus] ||
+    `Your seller account status is "${sellerStatus}".`
+  );
+
+
+  return false;
+}
+
+  /* =====================================================
+     SAVE AUTH SESSION
+
+     We save the session BEFORE redirecting to
+     upload-documents because that page needs authentication.
+  ===================================================== */
+
+  const saveSellerSession = () => {
+
+    /* -----------------------------------------------
+       Remove old seller-specific storage
+    ----------------------------------------------- */
 
     localStorage.removeItem(
       "sellerToken"
@@ -556,9 +528,9 @@ function Login() {
     );
 
 
-    /* =====================================================
-       ONE TOKEN ONLY
-    ===================================================== */
+    /* -----------------------------------------------
+       One token
+    ----------------------------------------------- */
 
     localStorage.setItem(
       "token",
@@ -566,74 +538,231 @@ function Login() {
     );
 
 
-    /* =====================================================
-       USER CACHE
-       
-       This is only for UI/cache.
-       Authorization uses token + /auth/me.
-    ===================================================== */
+    /* -----------------------------------------------
+       UI cache only
+    ----------------------------------------------- */
 
     localStorage.setItem(
       "user",
-      JSON.stringify(user)
-    );
-
-
-    /* =====================================================
-       VERIFY LOCAL STORAGE
-    ===================================================== */
-
-    console.log(
-      "========== LOCAL STORAGE =========="
-    );
-
-    console.log(
-      "TOKEN:",
-      localStorage.getItem(
-        "token"
+      JSON.stringify(
+        user
       )
     );
 
+
     console.log(
-      "USER:",
-      JSON.parse(
+      "========== SELLER SESSION SAVED =========="
+    );
+
+    console.log(
+      "Token:",
+      Boolean(
         localStorage.getItem(
-          "user"
+          "token"
         )
       )
     );
 
     console.log(
-      "==================================="
+      "User:",
+      JSON.parse(
+        localStorage.getItem(
+          "user"
+        ) || "null"
+      )
+    );
+
+    console.log(
+      "=========================================="
+    );
+
+  };
+
+
+  /* =====================================================
+     KYC CHECK
+  ===================================================== */
+
+  if (
+    sellerVerificationStatus !==
+    "approved"
+  ) {
+
+    console.log(
+      "⚠️ SELLER KYC IS NOT APPROVED"
+    );
+
+    console.log(
+      "KYC Status:",
+      sellerVerificationStatus
     );
 
 
-    /* =====================================================
-       CLEAR ERROR
-    ===================================================== */
+    /*
+    ======================================================
+       KYC PENDING / NOT SUBMITTED
+    ======================================================
+    */
+
+    if (
+      sellerVerificationStatus ===
+      "pending"
+    ) {
+
+      console.log(
+        "📄 KYC pending/not completed"
+      );
+
+      saveSellerSession();
+
+      setServerError("");
+
+
+      console.log(
+        "🚀 REDIRECT → /seller/upload-documents"
+      );
+
+
+      navigate(
+        "/seller/upload-documents",
+        {
+          replace: true,
+        }
+      );
+
+
+      return false;
+    }
+
+
+    /*
+    ======================================================
+       KYC REJECTED
+    ======================================================
+    */
+
+    if (
+      sellerVerificationStatus ===
+      "rejected"
+    ) {
+
+      console.log(
+        "❌ KYC rejected"
+      );
+
+      saveSellerSession();
+
+      setServerError(
+        "Your KYC verification was rejected. Please update your documents."
+      );
+
+
+      navigate(
+        "/seller/upload-documents",
+        {
+          replace: true,
+          state: {
+            fromLogin: true,
+            kycRejected: true,
+          },
+        }
+      );
+
+
+      return false;
+    }
+
+
+    /*
+    ======================================================
+       OTHER / MISSING STATUS
+    ======================================================
+    */
+
+    console.log(
+      "⚠️ Unknown/missing KYC status"
+    );
+
+
+    saveSellerSession();
 
     setServerError("");
 
 
-    /* =====================================================
-       NAVIGATE
-    ===================================================== */
-
-    console.log(
-      "🚀 NAVIGATING TO SELLER DASHBOARD"
-    );
-
     navigate(
-      "/seller/dashboard",
+      "/seller/upload-documents",
       {
         replace: true,
+        state: {
+          fromLogin: true,
+          kycIncomplete: true,
+        },
       }
     );
 
 
-    return true;
-  };
+    return false;
+  }
 
+
+  /* =====================================================
+     SELLER + KYC APPROVED
+  ===================================================== */
+
+  console.log(
+    "======================================="
+  );
+
+  console.log(
+    "✅ SELLER ACCOUNT APPROVED"
+  );
+
+  console.log(
+    "✅ KYC VERIFIED"
+  );
+
+  console.log(
+    "✅ SELLER LOGIN ALLOWED"
+  );
+
+  console.log(
+    "======================================="
+  );
+
+
+  /* =====================================================
+     SAVE SESSION
+  ===================================================== */
+
+  saveSellerSession();
+
+
+  /* =====================================================
+     CLEAR ERROR
+  ===================================================== */
+
+  setServerError("");
+
+
+  /* =====================================================
+     REDIRECT DASHBOARD
+  ===================================================== */
+
+  console.log(
+    "🚀 REDIRECT → /seller/dashboard"
+  );
+
+
+  navigate(
+    "/seller/dashboard",
+    {
+      replace: true,
+    }
+  );
+
+
+  return true;
+};
 
   /* =========================================================
      PASSWORD LOGIN
