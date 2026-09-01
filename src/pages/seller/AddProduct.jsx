@@ -151,6 +151,9 @@ const createEmptyForm = () => ({
     returnDays: 7,
     provider: "",
     restrictions: [],
+
+    // Empty = serviceable everywhere.
+    serviceablePincodes: [],
   },
 
   details: {
@@ -642,6 +645,9 @@ const AddProduct = () => {
   const [tagInput, setTagInput] =
     useState("");
 
+  const [pincodeInput, setPincodeInput] =
+    useState("");
+
   const [customBrand, setCustomBrand] =
     useState("");
 
@@ -971,6 +977,67 @@ const AddProduct = () => {
                   "returnDays"
                 ? Number(value)
                 : value,
+        },
+      }));
+    };
+
+
+  const addServiceablePincode =
+    () => {
+      const pincode =
+        pincodeInput.trim();
+
+      if (!/^\\d{6}$/.test(pincode)) {
+        setError(
+          "Please enter a valid 6-digit pincode"
+        );
+        return;
+      }
+
+      setForm((prev) => {
+        const existing =
+          prev.shipping
+            .serviceablePincodes || [];
+
+        if (existing.includes(pincode)) {
+          return prev;
+        }
+
+        return {
+          ...prev,
+
+          shipping: {
+            ...prev.shipping,
+
+            serviceablePincodes: [
+              ...existing,
+              pincode,
+            ],
+          },
+        };
+      });
+
+      setPincodeInput("");
+      setError("");
+    };
+
+
+  const removeServiceablePincode =
+    (pincode) => {
+      setForm((prev) => ({
+        ...prev,
+
+        shipping: {
+          ...prev.shipping,
+
+          serviceablePincodes:
+            (
+              prev.shipping
+                .serviceablePincodes || []
+            ).filter(
+              (item) =>
+                item !== pincode
+            ),
         },
       }));
     };
@@ -1651,6 +1718,28 @@ const AddProduct = () => {
         )
       ) {
         return "Maximum order quantity cannot be lower than minimum quantity";
+      }
+
+      const serviceablePincodes =
+        form.shipping
+          .serviceablePincodes || [];
+
+      for (
+        const pincode of
+          serviceablePincodes
+      ) {
+        if (!/^\\d{6}$/.test(pincode)) {
+          return `Invalid serviceable pincode: ${pincode}`;
+        }
+      }
+
+      if (
+        new Set(
+          serviceablePincodes
+        ).size !==
+        serviceablePincodes.length
+      ) {
+        return "Duplicate serviceable pincodes are not allowed";
       }
 
       if (
@@ -4024,6 +4113,138 @@ const AddProduct = () => {
 
                 Product is returnable
               </label>
+
+            </div>
+
+
+            {/* ===========================================
+                SERVICEABLE PINCODES
+            =========================================== */}
+
+            <div className="mt-7 border-t border-zinc-100 pt-7">
+
+              <div className="mb-4">
+                <h3 className="font-bold">
+                  Serviceable Pincodes
+                </h3>
+
+                <p className="mt-1 text-xs leading-5 text-zinc-500">
+                  Add the 6-digit Indian pincodes
+                  where this product can be
+                  delivered. Leave this empty to
+                  make the product serviceable
+                  everywhere.
+                </p>
+              </div>
+
+
+              <div className="flex flex-col gap-3 sm:flex-row">
+
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="postal-code"
+                  maxLength={6}
+                  value={
+                    pincodeInput
+                  }
+                  onChange={(e) => {
+                    const value =
+                      e.target.value
+                        .replace(
+                          /\\D/g,
+                          ""
+                        )
+                        .slice(0, 6);
+
+                    setPincodeInput(
+                      value
+                    );
+
+                    if (error) {
+                      setError("");
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (
+                      e.key ===
+                      "Enter"
+                    ) {
+                      e.preventDefault();
+                      addServiceablePincode();
+                    }
+                  }}
+                  placeholder="Enter 6-digit pincode"
+                  className={
+                    inputClass
+                  }
+                />
+
+                <button
+                  type="button"
+                  onClick={
+                    addServiceablePincode
+                  }
+                  disabled={
+                    pincodeInput.length !==
+                    6
+                  }
+                  className={`${buttonClass} shrink-0 bg-zinc-950 text-white hover:bg-zinc-800`}
+                >
+                  <Plus size={16} />
+                  Add Pincode
+                </button>
+
+              </div>
+
+
+              {(
+                form.shipping
+                  .serviceablePincodes ||
+                []
+              ).length > 0 ? (
+                <div className="mt-5 flex flex-wrap gap-2">
+
+                  {form.shipping
+                    .serviceablePincodes
+                    .map(
+                      (pincode) => (
+                        <div
+                          key={
+                            pincode
+                          }
+                          className="inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 shadow-sm"
+                        >
+                          <span>
+                            {pincode}
+                          </span>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              removeServiceablePincode(
+                                pincode
+                              )
+                            }
+                            className="rounded-md p-1 text-zinc-400 transition hover:bg-red-50 hover:text-red-600"
+                            aria-label={`Remove pincode ${pincode}`}
+                          >
+                            <X
+                              size={14}
+                            />
+                          </button>
+                        </div>
+                      )
+                    )}
+
+                </div>
+              ) : (
+                <div className="mt-4 rounded-xl border border-dashed border-zinc-300 bg-zinc-50 px-4 py-3 text-xs leading-5 text-zinc-500">
+                  No pincodes added. This
+                  product will be treated as
+                  serviceable everywhere.
+                </div>
+              )}
 
             </div>
 

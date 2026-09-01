@@ -107,6 +107,16 @@ function EditProduct() {
     warrantyInformation: "",
     returnPolicy: "",
     shippingInformation: "",
+    shipping: {
+      freeShipping: false,
+      shippingCharge: 0,
+      processingTime: 2,
+      returnDays: 7,
+      provider: "",
+      restrictions: [],
+      serviceablePincodes: [],
+    },
+    serviceablePincodes: [],
     minimumOrderQuantity: 1,
     maximumOrderQuantity: 10,
   });
@@ -134,6 +144,21 @@ function EditProduct() {
             product.returnPolicy || "",
           shippingInformation:
             product.shippingInformation || "",
+          shipping: {
+            ...(product.shipping || {}),
+            serviceablePincodes: Array.isArray(
+              product.shipping?.serviceablePincodes
+            )
+              ? product.shipping.serviceablePincodes
+              : [],
+          },
+          serviceablePincodes: Array.isArray(
+            product.shipping?.serviceablePincodes
+          )
+            ? product.shipping.serviceablePincodes
+            : Array.isArray(product.serviceablePincodes)
+              ? product.serviceablePincodes
+              : [],
           minimumOrderQuantity:
             product.minimumOrderQuantity || 1,
           maximumOrderQuantity:
@@ -169,6 +194,109 @@ function EditProduct() {
       ...previous,
       [name]: value,
     }));
+  };
+
+  const addServiceablePincode = (e) => {
+    e?.preventDefault();
+
+    const input = document.getElementById(
+      "serviceable-pincode-input"
+    );
+
+    if (!input) return;
+
+    const pincode = String(input.value || "").replace(/\D/g, "");
+
+    if (!pincode) {
+      toast.error("Enter a pincode");
+      return;
+    }
+
+    if (pincode.length !== 6) {
+      toast.error("Pincode must be exactly 6 digits");
+      return;
+    }
+
+    setForm((previous) => {
+      const existing = Array.isArray(
+        previous.serviceablePincodes
+      )
+        ? previous.serviceablePincodes
+        : [];
+
+      if (existing.includes(pincode)) {
+        toast.error("This pincode is already added");
+        return previous;
+      }
+
+      const updatedPincodes = [
+        ...existing,
+        pincode,
+      ];
+
+      return {
+        ...previous,
+        serviceablePincodes:
+          updatedPincodes,
+        shipping: {
+          ...(previous.shipping || {}),
+          serviceablePincodes:
+            updatedPincodes,
+        },
+      };
+    });
+
+    input.value = "";
+    input.focus();
+  };
+
+  const removeServiceablePincode = (pincode) => {
+    setForm((previous) => {
+      const updatedPincodes = (
+        previous.serviceablePincodes || []
+      ).filter(
+        (item) => item !== pincode
+      );
+
+      return {
+        ...previous,
+        serviceablePincodes:
+          updatedPincodes,
+        shipping: {
+          ...(previous.shipping || {}),
+          serviceablePincodes:
+            updatedPincodes,
+        },
+      };
+    });
+  };
+
+  const validateServiceablePincodes = () => {
+    const pincodes = Array.isArray(
+      form.serviceablePincodes
+    )
+      ? form.serviceablePincodes
+      : [];
+
+    const invalid = pincodes.find(
+      (pincode) => !/^\d{6}$/.test(String(pincode))
+    );
+
+    if (invalid) {
+      return `Invalid serviceable pincode: ${invalid}`;
+    }
+
+    if (new Set(pincodes).size !== pincodes.length) {
+      return "Duplicate serviceable pincodes are not allowed";
+    }
+
+    return null;
+  };
+
+  const handleServiceablePincodeInput = (e) => {
+    e.target.value = e.target.value
+      .replace(/\D/g, "")
+      .slice(0, 6);
   };
 
   const handleVariantChange = (
@@ -305,47 +433,283 @@ function EditProduct() {
     }));
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+const handleSubmit = async (e) => {
+  e.preventDefault();
 
-    const variantError = validateVariants();
+  try {
+    setSaving(true);
 
-    if (variantError) {
-      toast.error(variantError);
+    /*
+    |--------------------------------------------------------------------------
+    | Validate serviceable pincodes
+    |--------------------------------------------------------------------------
+    */
+
+    const pincodeError =
+      validateServiceablePincodes();
+
+    if (pincodeError) {
+      toast.error(pincodeError);
       return;
     }
 
-    try {
-      setSaving(true);
+    /*
+    |--------------------------------------------------------------------------
+    | Validate variants
+    |--------------------------------------------------------------------------
+    */
 
-      await updateProduct(id, {
-        ...form,
-        minimumOrderQuantity: Number(
-          form.minimumOrderQuantity
-        ),
-        maximumOrderQuantity: Number(
-          form.maximumOrderQuantity
-        ),
+    for (let i = 0; i < variants.length; i++) {
+      const variant = variants[i];
 
-        // Send the complete edited variants,
-        // including GST as `tax`.
-        variants: buildVariants(),
-      });
+      const sku = String(
+        variant.sku || ""
+      ).trim();
 
-      toast.success(
-        "Product updated and submitted for approval"
-      );
+      if (!sku) {
+        toast.error(
+          `Variant ${i + 1}: SKU is required`
+        );
+        return;
+      }
 
-      navigate(`/seller/products/${id}`);
-    } catch (error) {
-      toast.error(
-        error.response?.data?.message ||
-          "Failed to update product"
-      );
-    } finally {
-      setSaving(false);
+      const price =
+        Number(variant.price);
+
+      if (
+        Number.isNaN(price) ||
+        price < 0
+      ) {
+        toast.error(
+          `Variant ${i + 1}: Invalid price`
+        );
+        return;
+      }
+
+      const tax =
+        Number(variant.tax ?? 0);
+
+      if (
+        Number.isNaN(tax) ||
+        tax < 0 ||
+        tax > 100
+      ) {
+        toast.error(
+          `Variant ${i + 1}: GST must be between 0% and 100%`
+        );
+        return;
+      }
     }
-  };
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Build variants
+    |--------------------------------------------------------------------------
+    */
+
+    const updatedVariants =
+      variants.map((variant) => ({
+        ...variant,
+
+        sku: String(
+          variant.sku || ""
+        )
+          .trim()
+          .toUpperCase(),
+
+        barcode: String(
+          variant.barcode || ""
+        ).trim(),
+
+        price: Number(
+          variant.price || 0
+        ),
+
+        compareAtPrice: Number(
+          variant.compareAtPrice || 0
+        ),
+
+        costPrice: Number(
+          variant.costPrice || 0
+        ),
+
+        currency: String(
+          variant.currency || "INR"
+        )
+          .trim()
+          .toUpperCase(),
+
+        /*
+        |--------------------------------------------------------------------------
+        | GST
+        |--------------------------------------------------------------------------
+        */
+
+        tax: Number(
+          variant.tax ?? 0
+        ),
+
+        discountPercentage:
+          Number(
+            variant.discountPercentage || 0
+          ),
+
+        stock: Number(
+          variant.stock || 0
+        ),
+
+        reservedStock: Number(
+          variant.reservedStock || 0
+        ),
+
+        lowStockThreshold:
+          Number(
+            variant.lowStockThreshold || 5
+          ),
+
+        trackInventory:
+          variant.trackInventory !== false,
+
+        allowBackorder:
+          Boolean(
+            variant.allowBackorder
+          ),
+
+        isActive:
+          variant.isActive !== false,
+      }));
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Shipping
+    |--------------------------------------------------------------------------
+    */
+
+    const normalizedPincodes = Array.from(
+      new Set(
+        (form.serviceablePincodes || [])
+          .map((pincode) =>
+            String(pincode).trim()
+          )
+          .filter((pincode) =>
+            /^[1-9][0-9]{5}$/.test(pincode)
+          )
+      )
+    );
+
+    const shipping = {
+      ...(form.shipping || {}),
+      serviceablePincodes:
+        normalizedPincodes,
+    };
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | FINAL UPDATE PAYLOAD
+    |--------------------------------------------------------------------------
+    */
+
+    const {
+      serviceablePincodes: _serviceablePincodes,
+      ...formWithoutTopLevelPincode
+    } = form;
+
+    const payload = {
+      ...formWithoutTopLevelPincode,
+
+      minimumOrderQuantity:
+        Number(
+          form.minimumOrderQuantity || 1
+        ),
+
+      maximumOrderQuantity:
+        Number(
+          form.maximumOrderQuantity || 10
+        ),
+
+      variants:
+        updatedVariants,
+
+      shipping,
+    };
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | DEBUG
+    |--------------------------------------------------------------------------
+    */
+
+    console.log(
+      "===================================="
+    );
+
+    console.log(
+      "UPDATE PRODUCT PAYLOAD:"
+    );
+
+    console.log(
+      JSON.stringify(
+        payload,
+        null,
+        2
+      )
+    );
+
+    console.log(
+      "===================================="
+    );
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | UPDATE PRODUCT
+    |--------------------------------------------------------------------------
+    */
+
+    const response =
+      await updateProduct(
+        id,
+        payload
+      );
+
+
+    console.log(
+      "UPDATE PRODUCT RESPONSE:",
+      response
+    );
+
+
+    toast.success(
+      "Product updated successfully"
+    );
+
+
+    navigate(
+      `/seller/products/${id}`
+    );
+
+  } catch (error) {
+
+    console.error(
+      "UPDATE PRODUCT ERROR:",
+      error
+    );
+
+    toast.error(
+      error.response?.data?.message ||
+        "Failed to update product"
+    );
+
+  } finally {
+
+    setSaving(false);
+  }
+};
+
 
   if (loading) {
     return (
@@ -814,13 +1178,117 @@ function EditProduct() {
           title="Shipping Information"
           description="Provide shipping details for customers."
         >
-          <TextAreaField
-            label="Shipping Information"
-            name="shippingInformation"
-            value={form.shippingInformation}
-            onChange={handleChange}
-            rows={4}
-          />
+          <div className="space-y-5">
+            <TextAreaField
+              label="Shipping Information"
+              name="shippingInformation"
+              value={form.shippingInformation}
+              onChange={handleChange}
+              rows={4}
+            />
+
+            {/* Serviceable Delivery Pincodes */}
+            <div>
+              <label className="mb-2 block text-xs font-bold text-zinc-700">
+                Serviceable Delivery Pincodes
+              </label>
+
+              <p className="mb-3 text-xs text-zinc-400">
+                Add the 6-digit Indian pincodes where this
+                product can be delivered. Leave empty to
+                allow delivery everywhere.
+              </p>
+
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <input
+                  id="serviceable-pincode-input"
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  placeholder="Enter 6-digit pincode"
+                  onInput={handleServiceablePincodeInput}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      addServiceablePincode(e);
+                    }
+                  }}
+                  className="
+                    h-11 w-full rounded-xl
+                    border border-zinc-200
+                    bg-zinc-50 px-4
+                    text-sm text-zinc-900
+                    outline-none transition
+                    placeholder:text-zinc-400
+                    focus:border-black
+                    focus:bg-white
+                    focus:ring-4
+                    focus:ring-black/5
+                  "
+                />
+
+                <button
+                  type="button"
+                  onClick={addServiceablePincode}
+                  className="
+                    inline-flex h-11 shrink-0
+                    items-center justify-center
+                    gap-2 rounded-xl
+                    bg-black px-5
+                    text-sm font-semibold
+                    text-white transition
+                    hover:bg-zinc-800
+                  "
+                >
+                  <Plus size={16} />
+                  Add Pincode
+                </button>
+              </div>
+
+              {(
+                form.serviceablePincodes || []
+              ).length > 0 && (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {form.serviceablePincodes.map(
+                    (pincode) => (
+                      <span
+                        key={pincode}
+                        className="
+                          inline-flex items-center
+                          gap-2 rounded-full
+                          border border-zinc-200
+                          bg-zinc-50 px-3 py-2
+                          text-xs font-semibold
+                          text-zinc-700
+                        "
+                      >
+                        {pincode}
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            removeServiceablePincode(
+                              pincode
+                            )
+                          }
+                          aria-label={`Remove pincode ${pincode}`}
+                          className="
+                            inline-flex h-5 w-5
+                            items-center justify-center
+                            rounded-full
+                            text-zinc-400
+                            hover:bg-zinc-200
+                            hover:text-black
+                          "
+                        >
+                          ×
+                        </button>
+                      </span>
+                    )
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
         </FormSection>
 
         {/* =============================================
