@@ -92,10 +92,12 @@ function ProductDetails() {
     0
   );
 
-  const image =
-    product.thumbnail ||
-    product.images?.[0] ||
-    "https://via.placeholder.com/600";
+ const image =
+  product?.media?.thumbnail ||
+  product?.media?.images?.[0] ||
+  product?.thumbnail ||
+  product?.images?.[0] ||
+  "https://via.placeholder.com/600";
 
   return (
     <div className="space-y-7">
