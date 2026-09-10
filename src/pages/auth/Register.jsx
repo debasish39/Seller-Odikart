@@ -25,7 +25,7 @@ import api from "../../services/api";
 */
 
 const ODIKART_LOGO =
-  "https://odikart.in/web-app-manifest-192x192.png";
+  "https://seller.odikart.in/icon-512.png";
 
 function Register() {
   const navigate = useNavigate();

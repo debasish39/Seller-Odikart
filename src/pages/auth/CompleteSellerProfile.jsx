@@ -28,7 +28,7 @@ import api from "../../services/api";
 */
 
 const ODIKART_LOGO =
-  "https://odikart.in/web-app-manifest-192x192.png";
+  "https://seller.odikart.in/icon-512.png";
 
 const SELLER_IMAGE =
   "https://images.unsplash.com/photo-1556761175-b413da4baf72?auto=format&fit=crop&w=1400&q=85";
