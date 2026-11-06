@@ -1,3 +1,4 @@
+
 import {
   useEffect,
   useState,
@@ -201,6 +202,52 @@ const currencyFormat = (value) =>
 
 
 /* =========================================================
+   SELLER DASHBOARD ANALYTICS CACHE
+   Cache duration: 5 minutes
+========================================================= */
+
+const SELLER_DASHBOARD_CACHE_KEY = "odikart_seller_dashboard_analytics_v1";
+const SELLER_DASHBOARD_CACHE_TTL = 5 * 60 * 1000;
+
+const readSellerDashboardCache = () => {
+  try {
+    const raw = localStorage.getItem(SELLER_DASHBOARD_CACHE_KEY);
+    if (!raw) return null;
+
+    const cached = JSON.parse(raw);
+    if (!cached?.timestamp || !cached?.analytics) {
+      localStorage.removeItem(SELLER_DASHBOARD_CACHE_KEY);
+      return null;
+    }
+
+    if (Date.now() - cached.timestamp > SELLER_DASHBOARD_CACHE_TTL) {
+      localStorage.removeItem(SELLER_DASHBOARD_CACHE_KEY);
+      return null;
+    }
+
+    return cached.analytics;
+  } catch (error) {
+    console.warn("Unable to read seller dashboard cache:", error);
+    try {
+      localStorage.removeItem(SELLER_DASHBOARD_CACHE_KEY);
+    } catch (_) {}
+    return null;
+  }
+};
+
+const writeSellerDashboardCache = (analytics) => {
+  try {
+    localStorage.setItem(
+      SELLER_DASHBOARD_CACHE_KEY,
+      JSON.stringify({ analytics, timestamp: Date.now() })
+    );
+  } catch (error) {
+    console.warn("Unable to save seller dashboard cache:", error);
+  }
+};
+
+
+/* =========================================================
    DASHBOARD
 ========================================================= */
 
@@ -213,13 +260,13 @@ const Dashboard = () => {
   const [
     analytics,
     setAnalytics,
-  ] = useState(null);
+  ] = useState(() => readSellerDashboardCache());
 
 
   const [
     loading,
     setLoading,
-  ] = useState(true);
+  ] = useState(() => !readSellerDashboardCache());
 
 
   const [
@@ -433,72 +480,44 @@ const Dashboard = () => {
 
   /* =======================================================
      LOAD ANALYTICS
+     Show cached analytics immediately and refresh in background.
   ======================================================= */
 
-  const loadAnalytics =
-    async () => {
+  const loadAnalytics = async () => {
+    try {
+      // Keep cached dashboard visible while refreshing.
+      if (!analytics) setLoading(true);
+      setError("");
 
-      try {
+      console.log("📊 Loading seller analytics...");
 
-        setLoading(true);
+      const data = await getSellerAnalytics();
 
-        setError("");
+      console.log("📊 SELLER ANALYTICS:", data);
 
-
-        console.log(
-          "📊 Loading seller analytics..."
-        );
-
-
-        const data =
-          await getSellerAnalytics();
-
-
-        console.log(
-          "📊 SELLER ANALYTICS:",
-          data
-        );
-
-
-        if (!data?.success) {
-
-          setError(
-            data?.message ||
-            "Unable to load dashboard"
-          );
-
-          return;
-
-        }
-
-
-        setAnalytics(
-          data?.analytics || {}
-        );
-
-
-      } catch (error) {
-
-        console.error(
-          "❌ Dashboard analytics error:",
-          error
-        );
-
-
-        setError(
-          error?.response?.data?.message ||
-          error?.message ||
-          "Unable to load dashboard"
-        );
-
-
-      } finally {
-
-        setLoading(false);
-
+      if (!data?.success) {
+        const message = data?.message || "Unable to load dashboard";
+        if (!analytics) setError(message);
+        return;
       }
 
-    };
+      const freshAnalytics = data?.analytics || {};
+      setAnalytics(freshAnalytics);
+      writeSellerDashboardCache(freshAnalytics);
+    } catch (error) {
+      console.error("❌ Dashboard analytics error:", error);
+
+      const message =
+        error?.response?.data?.message ||
+        error?.message ||
+        "Unable to load dashboard";
+
+      // Keep usable cached data if the background refresh fails.
+      if (!analytics) setError(message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
 
   /* =======================================================

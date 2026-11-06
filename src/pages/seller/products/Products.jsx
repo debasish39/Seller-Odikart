@@ -1,3 +1,4 @@
+
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import toast from "react-hot-toast";
@@ -20,32 +21,92 @@ import {
 } from "../../../services/productService";
 
 function Products() {
-  const [products, setProducts] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const PRODUCTS_CACHE_KEY = "odikart_seller_products_cache_v1";
+  const PRODUCTS_CACHE_TTL = 5 * 60 * 1000;
+
+  const readProductsCache = () => {
+    try {
+      const raw = localStorage.getItem(PRODUCTS_CACHE_KEY);
+      if (!raw) return null;
+
+      const cached = JSON.parse(raw);
+      if (
+        !cached ||
+        !Array.isArray(cached.products) ||
+        Date.now() - Number(cached.timestamp || 0) > PRODUCTS_CACHE_TTL
+      ) {
+        localStorage.removeItem(PRODUCTS_CACHE_KEY);
+        return null;
+      }
+
+      return cached.products;
+    } catch (error) {
+      console.warn("Unable to read seller products cache:", error);
+      try {
+        localStorage.removeItem(PRODUCTS_CACHE_KEY);
+      } catch {
+        // Ignore localStorage access errors.
+      }
+      return null;
+    }
+  };
+
+  const writeProductsCache = (items) => {
+    try {
+      localStorage.setItem(
+        PRODUCTS_CACHE_KEY,
+        JSON.stringify({
+          products: items,
+          timestamp: Date.now(),
+        })
+      );
+    } catch (error) {
+      console.warn("Unable to save seller products cache:", error);
+    }
+  };
+
+  const [products, setProducts] = useState(() => readProductsCache() || []);
+  const [loading, setLoading] = useState(() => readProductsCache() === null);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
 
-  const loadProducts = async () => {
+  const loadProducts = async (showLoader = false) => {
     try {
-      setLoading(true);
+      if (showLoader && products.length === 0) {
+        setLoading(true);
+      }
 
       const data = await getSellerProducts();
 
-      setProducts(data.products || []);
-    } catch (error) {
-      console.error(error);
+      if (!data?.success && !Array.isArray(data?.products)) {
+        throw new Error(data?.message || "Failed to load products");
+      }
 
-      toast.error(
-        error.response?.data?.message ||
-          "Failed to load products"
-      );
+      const freshProducts = Array.isArray(data?.products)
+        ? data.products
+        : [];
+
+      setProducts(freshProducts);
+      writeProductsCache(freshProducts);
+    } catch (error) {
+      console.error("Seller products load error:", error);
+
+      if (products.length === 0) {
+        toast.error(
+          error.response?.data?.message ||
+            error.message ||
+            "Failed to load products"
+        );
+      }
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadProducts();
+    // Show cached products immediately, then refresh from the API.
+    loadProducts(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleDelete = async (productId) => {
@@ -60,11 +121,13 @@ function Products() {
 
       toast.success("Product deleted successfully");
 
-      setProducts((previous) =>
-        previous.filter(
+      setProducts((previous) => {
+        const updated = previous.filter(
           (product) => product._id !== productId
-        )
-      );
+        );
+        writeProductsCache(updated);
+        return updated;
+      });
     } catch (error) {
       toast.error(
         error.response?.data?.message ||
@@ -81,16 +144,18 @@ function Products() {
         "Product submitted for approval"
       );
 
-      setProducts((previous) =>
-        previous.map((product) =>
+      setProducts((previous) => {
+        const updated = previous.map((product) =>
           product._id === productId
             ? {
                 ...product,
                 status: "pending",
               }
             : product
-        )
-      );
+        );
+        writeProductsCache(updated);
+        return updated;
+      });
     } catch (error) {
       toast.error(
         error.response?.data?.message ||
@@ -98,6 +163,7 @@ function Products() {
       );
     }
   };
+
 
   const filteredProducts = useMemo(() => {
     return products.filter((product) => {
@@ -210,7 +276,7 @@ function Products() {
 
         <div className="flex gap-2">
           <button
-            onClick={loadProducts}
+            onClick={() => loadProducts(true)}
             className="
               flex h-11 items-center justify-center
               rounded-xl border border-zinc-200
