@@ -415,7 +415,8 @@ function App() {
         />
 
       </Routes>
-
+     {/* GLOBAL FIREBASE reCAPTCHA */}
+      <div id="recaptcha-container" />
     </BrowserRouter>
   );
 }

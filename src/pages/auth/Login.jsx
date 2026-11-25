@@ -1,25 +1,18 @@
-import {
-  useEffect,
-  useState,
-} from "react";
-
-import {
-  useNavigate,
-  Link,
-} from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useNavigate, Link } from "react-router-dom";
 
 import {
   ArrowRight,
-  Eye,
-  EyeOff,
-  Mail,
-  LockKeyhole,
   Store,
   Package,
   BarChart3,
   ShieldCheck,
   X,
   Smartphone,
+  ArrowLeft,
+  CheckCircle2,
+  Sparkles,
+  ShoppingBag,
 } from "lucide-react";
 
 import AOS from "aos";
@@ -27,2738 +20,688 @@ import "aos/dist/aos.css";
 
 import api from "../../services/api";
 
+import {
+  sendPhoneOTP,
+  verifyPhoneOTP,
+  resetRecaptcha,
+} from "../../phoneAuth";
 
-/* =========================================================
-   ODIKART LOGO
-========================================================= */
-
-const ODIKART_LOGO =
-  "https://seller.odikart.in/icon-512.png";
-
+const ODIKART_LOGO = "https://seller.odikart.in/icon-512.png";
 
 function Login() {
-
   const navigate = useNavigate();
 
+  const [form, setForm] = useState({ otp: "" });
+  const [otpSent, setOtpSent] = useState(false);
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [confirmationResult, setConfirmationResult] = useState(null);
 
-  /* =========================================================
-     FORM
-  ========================================================= */
+  const [serverError, setServerError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [otpLoading, setOtpLoading] = useState(false);
 
-  const [form, setForm] = useState({
-    email: "",
-    password: "",
-    otp: "",
-  });
-
-
-  /* =========================================================
-     LOGIN METHOD
-  ========================================================= */
-
-  const [loginMethod, setLoginMethod] =
-    useState("password");
-
-  const [otpSent, setOtpSent] =
-    useState(false);
-
-
-  /* =========================================================
-     UI
-  ========================================================= */
-
-  const [errors, setErrors] =
-    useState({});
-
-  const [serverError, setServerError] =
-    useState("");
-
-  const [loading, setLoading] =
-    useState(false);
-
-  const [otpLoading, setOtpLoading] =
-    useState(false);
-
-  const [showPassword, setShowPassword] =
-    useState(false);
-
-
-  /* =========================================================
-     AOS
-  ========================================================= */
-
+  // AOS
   useEffect(() => {
-
     AOS.init({
-      duration: 500,
+      duration: 600,
       easing: "ease-out-cubic",
       once: true,
-      offset: 15,
+      offset: 20,
     });
 
-    return () => {
-      AOS.refreshHard();
-    };
-
+    return () => AOS.refreshHard();
   }, []);
 
-
-  /* =========================================================
-     AUTO CLEAR SERVER ERROR
-  ========================================================= */
-
+  // Automatically clear error
   useEffect(() => {
-
-    if (!serverError) {
-      return;
-    }
+    if (!serverError) return;
 
     const timer = setTimeout(() => {
       setServerError("");
     }, 6000);
 
-    return () => {
-      clearTimeout(timer);
-    };
-
+    return () => clearTimeout(timer);
   }, [serverError]);
 
-
-  /* =========================================================
-     INPUT CHANGE
-  ========================================================= */
-
-  const handleChange = (e) => {
-
-    const {
-      name,
-      value,
-    } = e.target;
-
-    setForm((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
-
-    setErrors((prev) => ({
-      ...prev,
-      [name]: "",
-    }));
-
+  // Send OTP
+  const sendLoginOTP = async () => {
     setServerError("");
 
-  };
-
-
-  /* =========================================================
-     CHANGE LOGIN METHOD
-  ========================================================= */
-
-  const changeLoginMethod = (method) => {
-
-    setLoginMethod(method);
-
-    setServerError("");
-
-    setErrors({});
-
-    setOtpSent(false);
-
-    setForm((prev) => ({
-      ...prev,
-      password: "",
-      otp: "",
-    }));
-
-  };
-
-
-  /* =========================================================
-     VALIDATE EMAIL
-  ========================================================= */
-
-  const validateEmail = () => {
-
-    const email =
-      form.email
-        .trim()
-        .toLowerCase();
-
-    if (!email) {
-
-      setErrors({
-        email:
-          "Email address is required.",
-      });
-
-      return false;
-    }
-
-    if (
-      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
-        email
-      )
-    ) {
-
-      setErrors({
-        email:
-          "Please enter a valid email address.",
-      });
-
-      return false;
-    }
-
-    return true;
-  };
-
-
-  /* =========================================================
-     VALIDATE PASSWORD
-  ========================================================= */
-
-  const validatePassword = () => {
-
-    const nextErrors = {};
-
-    const email =
-      form.email
-        .trim()
-        .toLowerCase();
-
-    const password =
-      form.password;
-
-    if (!email) {
-
-      nextErrors.email =
-        "Email address is required.";
-
-    } else if (
-      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
-        email
-      )
-    ) {
-
-      nextErrors.email =
-        "Please enter a valid email address.";
-
-    }
-
-    if (!password) {
-
-      nextErrors.password =
-        "Password is required.";
-
-    }
-
-    setErrors(nextErrors);
-
-    return (
-      Object.keys(nextErrors).length === 0
-    );
-  };
-
-
-/* =========================================================
-   SELLER LOGIN SUCCESS
-
-   FLOW:
-
-   seller role?
-      ↓
-   seller approved?
-      ↓
-   KYC approved?
-      ├── YES → /seller/dashboard
-      └── NO  → /seller/upload-documents
-
-   Storage:
-   token
-   user
-========================================================= */
-
-const handleSellerLoginSuccess = (
-  token,
-  user
-) => {
-
-  console.log(
-    "======================================="
-  );
-
-  console.log(
-    "========== SELLER LOGIN CHECK =========="
-  );
-
-  console.log(
-    "TOKEN RECEIVED:",
-    Boolean(token)
-  );
-
-  console.log(
-    "TOKEN LENGTH:",
-    token?.length || 0
-  );
-
-  console.log(
-    "USER:",
-    user
-  );
-
-  console.log(
-    "======================================="
-  );
-
-
-  /* =====================================================
-     TOKEN CHECK
-  ===================================================== */
-
-  if (!token) {
-
-    setServerError(
-      "Authentication token was not received."
-    );
-
-    return false;
-  }
-
-
-  /* =====================================================
-     USER CHECK
-  ===================================================== */
-
-  if (!user) {
-
-    setServerError(
-      "Unable to retrieve your account information."
-    );
-
-    return false;
-  }
-
-
-  /* =====================================================
-     ACCOUNT STATUS
-  ===================================================== */
-
-  if (user.isBlocked) {
-
-    setServerError(
-      "Your account has been blocked. Please contact support."
-    );
-
-    return false;
-  }
-
-
-  if (user.isDeleted) {
-
-    setServerError(
-      "This account is no longer available."
-    );
-
-    return false;
-  }
-
-
-  /* =====================================================
-     ROLE
-  ===================================================== */
-
-  const role =
-    user.role || "user";
-
-
-  /* =====================================================
-     SELLER STATUS
-  ===================================================== */
-
-  const sellerStatus =
-    user.sellerStatus || "none";
-
-
-  /* =====================================================
-     KYC STATUS
-
-     Preferred API field:
-       sellerVerificationStatus
-
-     Backward-compatible fallback:
-       sellerInfo.verification.status
-
-  ===================================================== */
-
-  const sellerVerificationStatus =
-    user.sellerVerificationStatus ||
-    user.sellerInfo?.verification?.status ||
-    "pending";
-
-
-  /* =====================================================
-     DEBUG
-  ===================================================== */
-
-  console.log(
-    "========== SELLER ACCESS =========="
-  );
-
-  console.log(
-    "Role:",
-    role
-  );
-
-  console.log(
-    "Seller Status:",
-    sellerStatus
-  );
-
-  console.log(
-    "KYC Status:",
-    sellerVerificationStatus
-  );
-
-  console.log(
-    "==================================="
-  );
-
-
-  /* =====================================================
-     ROLE CHECK
-  ===================================================== */
-
-  if (role !== "seller") {
-
-    if (
-      sellerStatus === "pending"
-    ) {
-
+    const cleaned = phoneNumber.replace(/\D/g, "");
+
+    const normalizedPhone =
+      cleaned.length === 10
+        ? `+91${cleaned}`
+        : cleaned.length === 12 && cleaned.startsWith("91")
+        ? `+${cleaned}`
+        : phoneNumber.trim();
+
+    if (!/^\+[1-9]\d{7,14}$/.test(normalizedPhone)) {
       setServerError(
-        "Your seller application is waiting for admin approval."
+        "Enter a valid phone number with country code (+91)."
       );
-
-    } else if (
-      sellerStatus === "rejected"
-    ) {
-
-      setServerError(
-        "Your seller application was rejected. Please contact support."
-      );
-
-    } else {
-
-      setServerError(
-        "This account is currently a customer account. Please apply to become a seller first."
-      );
-
+      return;
     }
 
-    return false;
-  }
+    try {
+      setOtpLoading(true);
 
+      const result = await sendPhoneOTP(normalizedPhone);
 
-  /* =====================================================
-     SELLER APPROVAL CHECK
-  ===================================================== */
-
- if (
-  sellerStatus !== "approved"
-) {
-
-  const statusMessages = {
-
-    pending:
-      "Your seller account is waiting for admin approval.",
-
-    rejected:
-      "Your seller application was rejected. Please contact support.",
-
-    suspended:
-      "Your seller account has been suspended. Please contact support.",
-
-    blocked:
-      "Your seller account has been blocked. Please contact support.",
-
-    none:
-      "This account is not registered as a seller.",
-
-  };
-
-
-  setServerError(
-    statusMessages[sellerStatus] ||
-    `Your seller account status is "${sellerStatus}".`
-  );
-
-
-  return false;
-}
-
-  /* =====================================================
-     SAVE AUTH SESSION
-
-     We save the session BEFORE redirecting to
-     upload-documents because that page needs authentication.
-  ===================================================== */
-
-  const saveSellerSession = () => {
-
-    /* -----------------------------------------------
-       Remove old seller-specific storage
-    ----------------------------------------------- */
-
-    localStorage.removeItem(
-      "sellerToken"
-    );
-
-    localStorage.removeItem(
-      "sellerUser"
-    );
-
-    localStorage.removeItem(
-      "sellerRole"
-    );
-
-    localStorage.removeItem(
-      "sellerEmail"
-    );
-
-    localStorage.removeItem(
-      "activeApplication"
-    );
-
-
-    /* -----------------------------------------------
-       One token
-    ----------------------------------------------- */
-
-    localStorage.setItem(
-      "token",
-      token
-    );
-
-
-    /* -----------------------------------------------
-       UI cache only
-    ----------------------------------------------- */
-
-    localStorage.setItem(
-      "user",
-      JSON.stringify(
-        user
-      )
-    );
-
-
-    console.log(
-      "========== SELLER SESSION SAVED =========="
-    );
-
-    console.log(
-      "Token:",
-      Boolean(
-        localStorage.getItem(
-          "token"
-        )
-      )
-    );
-
-    console.log(
-      "User:",
-      JSON.parse(
-        localStorage.getItem(
-          "user"
-        ) || "null"
-      )
-    );
-
-    console.log(
-      "=========================================="
-    );
-
-  };
-
-
-  /* =====================================================
-     KYC CHECK
-  ===================================================== */
-
-  if (
-    sellerVerificationStatus !==
-    "approved"
-  ) {
-
-    console.log(
-      "⚠️ SELLER KYC IS NOT APPROVED"
-    );
-
-    console.log(
-      "KYC Status:",
-      sellerVerificationStatus
-    );
-
-
-    /*
-    ======================================================
-       KYC PENDING / NOT SUBMITTED
-    ======================================================
-    */
-
-    if (
-      sellerVerificationStatus ===
-      "pending"
-    ) {
-
-      console.log(
-        "📄 KYC pending/not completed"
-      );
-
-      saveSellerSession();
-
+      setConfirmationResult(result);
+      setPhoneNumber(normalizedPhone);
+      setOtpSent(true);
+      setForm((prev) => ({ ...prev, otp: "" }));
       setServerError("");
-
-
-      console.log(
-        "🚀 REDIRECT → /seller/upload-documents"
-      );
-
-
-      navigate(
-        "/seller/upload-documents",
-        {
-          replace: true,
-        }
-      );
-
-
-      return false;
-    }
-
-
-    /*
-    ======================================================
-       KYC REJECTED
-    ======================================================
-    */
-
-    if (
-      sellerVerificationStatus ===
-      "rejected"
-    ) {
-
-      console.log(
-        "❌ KYC rejected"
-      );
-
-      saveSellerSession();
+    } catch (error) {
+      const errorMessages = {
+        "auth/invalid-phone-number": "The phone number is invalid.",
+        "auth/too-many-requests":
+          "Too many attempts. Please try again later.",
+        "auth/quota-exceeded":
+          "SMS quota exceeded. Please try again later.",
+      };
 
       setServerError(
-        "Your KYC verification was rejected. Please update your documents."
+        errorMessages[error.code] ||
+          error.message ||
+          "Unable to send OTP. Please try again."
       );
 
+      resetRecaptcha();
+    } finally {
+      setOtpLoading(false);
+    }
+  };
 
-      navigate(
-        "/seller/upload-documents",
+  // Login success
+  const handleSellerLoginSuccess = (token, user) => {
+    if (!token || !user) {
+      setServerError(
+        "Login succeeded, but the server returned incomplete account data."
+      );
+      return;
+    }
+
+    localStorage.setItem("token", token);
+    localStorage.setItem("user", JSON.stringify(user));
+
+    setServerError("");
+    navigate("/seller/dashboard", { replace: true });
+  };
+
+  // Verify OTP
+  const verifyLoginOTP = async () => {
+    setServerError("");
+
+    const otp = form.otp.trim();
+
+    if (!confirmationResult) {
+      setServerError("Please request a new OTP first.");
+      return;
+    }
+
+    if (!/^\d{6}$/.test(otp)) {
+      setServerError("Enter a valid 6-digit OTP.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const { firebaseToken } = await verifyPhoneOTP(
+        confirmationResult,
+        otp
+      );
+
+      const response = await api.post(
+        "/auth/firebase-phone-login",
+        { app: "seller" },
         {
-          replace: true,
-          state: {
-            fromLogin: true,
-            kycRejected: true,
+          headers: {
+            Authorization: `Bearer ${firebaseToken}`,
           },
         }
       );
 
+      const { token, user } = response.data;
 
-      return false;
+      handleSellerLoginSuccess(token, user);
+    } catch (error) {
+      const firebaseMessages = {
+        "auth/invalid-verification-code":
+          "Incorrect OTP. Please check and try again.",
+        "auth/code-expired":
+          "OTP expired. Please request a new one.",
+      };
+
+      setServerError(
+        firebaseMessages[error.code] ||
+          error.response?.data?.message ||
+          error.response?.data?.error ||
+          error.message ||
+          "Phone verification failed."
+      );
+    } finally {
+      setLoading(false);
     }
+  };
 
-
-    /*
-    ======================================================
-       OTHER / MISSING STATUS
-    ======================================================
-    */
-
-    console.log(
-      "⚠️ Unknown/missing KYC status"
-    );
-
-
-    saveSellerSession();
-
-    setServerError("");
-
-
-    navigate(
-      "/seller/upload-documents",
-      {
-        replace: true,
-        state: {
-          fromLogin: true,
-          kycIncomplete: true,
-        },
-      }
-    );
-
-
-    return false;
-  }
-
-
-  /* =====================================================
-     SELLER + KYC APPROVED
-  ===================================================== */
-
-  console.log(
-    "======================================="
-  );
-
-  console.log(
-    "✅ SELLER ACCOUNT APPROVED"
-  );
-
-  console.log(
-    "✅ KYC VERIFIED"
-  );
-
-  console.log(
-    "✅ SELLER LOGIN ALLOWED"
-  );
-
-  console.log(
-    "======================================="
-  );
-
-
-  /* =====================================================
-     SAVE SESSION
-  ===================================================== */
-
-  saveSellerSession();
-
-
-  /* =====================================================
-     CLEAR ERROR
-  ===================================================== */
-
-  setServerError("");
-
-
-  /* =====================================================
-     REDIRECT DASHBOARD
-  ===================================================== */
-
-  console.log(
-    "🚀 REDIRECT → /seller/dashboard"
-  );
-
-
-  navigate(
-    "/seller/dashboard",
-    {
-      replace: true,
-    }
-  );
-
-
-  return true;
-};
-
-  /* =========================================================
-     PASSWORD LOGIN
-  ========================================================= */
-
-  const loginWithPassword =
-    async () => {
-
-      if (
-        !validatePassword()
-      ) {
-        return;
-      }
-
-
-      try {
-
-        setLoading(true);
-
-        setServerError("");
-
-
-        const email =
-          form.email
-            .trim()
-            .toLowerCase();
-
-
-        /* ==================================================
-           DEBUG REQUEST
-        ================================================== */
-
-        console.log(
-          "========== PASSWORD LOGIN REQUEST =========="
-        );
-
-        console.log(
-          "Email:",
-          email
-        );
-
-        console.log(
-          "App:",
-          "seller"
-        );
-
-        console.log(
-          "============================================"
-        );
-
-
-        /* ==================================================
-           SELLER LOGIN
-        ================================================== */
-
-        const response =
-          await api.post(
-            "/auth/signin-password",
-            {
-              email,
-
-              password:
-                form.password,
-
-              app:
-                "seller",
-            }
-          );
-
-
-        console.log(
-          "🔐 Password login response:",
-          response.data
-        );
-
-
-        const {
-          token,
-          user,
-        } = response.data;
-
-
-        /* ==================================================
-           HANDLE LOGIN
-        ================================================== */
-
-        handleSellerLoginSuccess(
-          token,
-          user
-        );
-
-      } catch (error) {
-
-        console.error(
-          "❌ Seller password login error:",
-          error
-        );
-
-        console.error(
-          "Backend response:",
-          error.response?.data
-        );
-
-
-        setServerError(
-          error.response?.data?.message ||
-          error.response?.data?.error ||
-          "Login failed. Please check your email and password."
-        );
-
-      } finally {
-
-        setLoading(false);
-
-      }
-
-    };
-
-
-  /* =========================================================
-     SEND LOGIN OTP
-  ========================================================= */
-
-  const sendLoginOTP =
-    async () => {
-
-      setServerError("");
-
-
-      if (
-        !validateEmail()
-      ) {
-        return;
-      }
-
-
-      try {
-
-        setOtpLoading(true);
-
-
-        const email =
-          form.email
-            .trim()
-            .toLowerCase();
-
-
-        console.log(
-          "========== SEND SELLER OTP =========="
-        );
-
-        console.log(
-          "Email:",
-          email
-        );
-
-        console.log(
-          "App:",
-          "seller"
-        );
-
-        console.log(
-          "======================================"
-        );
-
-
-        const response =
-          await api.post(
-            "/auth/signin-otp",
-            {
-              email,
-
-              app:
-                "seller",
-            }
-          );
-
-
-        console.log(
-          "📩 Send OTP response:",
-          response.data
-        );
-
-
-        if (
-          response.data?.success
-        ) {
-
-          setOtpSent(true);
-
-          setServerError("");
-
-          setForm((prev) => ({
-            ...prev,
-            otp: "",
-          }));
-
-        } else {
-
-          setServerError(
-            response.data?.message ||
-            "Failed to send OTP."
-          );
-
-        }
-
-      } catch (error) {
-
-        console.error(
-          "❌ Send seller OTP error:",
-          error
-        );
-
-        console.error(
-          "Backend:",
-          error.response?.data
-        );
-
-
-        setServerError(
-          error.response?.data?.message ||
-          error.response?.data?.error ||
-          "Unable to send OTP."
-        );
-
-      } finally {
-
-        setOtpLoading(false);
-
-      }
-
-    };
-
-
-  /* =========================================================
-     VERIFY LOGIN OTP
-  ========================================================= */
-
-  const verifyLoginOTP =
-    async () => {
-
-      setServerError("");
-
-
-      const email =
-        form.email
-          .trim()
-          .toLowerCase();
-
-
-      const otp =
-        form.otp.trim();
-
-
-      if (!email) {
-
-        setServerError(
-          "Please enter your email address."
-        );
-
-        return;
-      }
-
-
-      if (!otp) {
-
-        setServerError(
-          "Please enter the OTP."
-        );
-
-        return;
-      }
-
-
-      if (
-        !/^\d{6}$/.test(otp)
-      ) {
-
-        setServerError(
-          "OTP must be exactly 6 digits."
-        );
-
-        return;
-      }
-
-
-      try {
-
-        setLoading(true);
-
-
-        console.log(
-          "========== VERIFY SELLER OTP =========="
-        );
-
-        console.log(
-          "Email:",
-          email
-        );
-
-        console.log(
-          "App:",
-          "seller"
-        );
-
-        console.log(
-          "========================================"
-        );
-
-
-        const response =
-          await api.post(
-            "/auth/verify-signin-otp",
-            {
-              email,
-
-              otp,
-
-              app:
-                "seller",
-            }
-          );
-
-
-        console.log(
-          "🔐 Verify OTP response:",
-          response.data
-        );
-
-
-        const {
-          token,
-          user,
-        } = response.data;
-
-
-        handleSellerLoginSuccess(
-          token,
-          user
-        );
-
-      } catch (error) {
-
-        console.error(
-          "❌ Seller OTP login error:",
-          error
-        );
-
-        console.error(
-          "Backend response:",
-          error.response?.data
-        );
-
-
-        setServerError(
-          error.response?.data?.message ||
-          error.response?.data?.error ||
-          "Invalid or expired OTP."
-        );
-
-      } finally {
-
-        setLoading(false);
-
-      }
-
-    };
-
-
-  /* =========================================================
-     FORM SUBMIT
-  ========================================================= */
-
+  // Form submit
   const login = async (e) => {
-
     e.preventDefault();
-
     setServerError("");
 
-
-    if (
-      loginMethod === "password"
-    ) {
-
-      await loginWithPassword();
-
+    if (!otpSent) {
+      await sendLoginOTP();
       return;
     }
 
-
-    if (
-      loginMethod === "otp"
-    ) {
-
-      if (!otpSent) {
-
-        await sendLoginOTP();
-
-        return;
-      }
-
-
-      await verifyLoginOTP();
-
-    }
-
+    await verifyLoginOTP();
   };
 
-
-  /* =========================================================
-     INPUT CLASS
-  ========================================================= */
-
-  const inputClass = (
-    field
-  ) => `
-    h-12
-    w-full
-    rounded-2xl
-    border
-    bg-zinc-50
-    px-4
-    text-sm
-    font-medium
-    text-zinc-950
-    outline-none
-    transition-all
-    placeholder:text-zinc-400
-
-    hover:border-zinc-300
-
-    focus:bg-white
-    focus:border-black
-    focus:ring-4
-    focus:ring-black/5
-
-    ${
-      errors[field]
-        ? `
-          border-red-400
-          bg-red-50/30
-          focus:border-red-500
-          focus:ring-red-500/10
-        `
-        : `
-          border-zinc-200
-        `
-    }
-  `;
-
-
-  /* =========================================================
-     INPUT ERROR
-  ========================================================= */
-
-  const InputError = ({
-    field,
-  }) => {
-
-    if (!errors[field]) {
-      return null;
-    }
-
-
-    return (
-      <p
-        id={`${field}-error`}
-        className="
-          mt-1.5
-          flex
-          items-center
-          gap-1.5
-          text-[11px]
-          font-medium
-          text-red-500
-        "
-      >
-
-        <span
-          className="
-            flex
-            h-4
-            w-4
-            items-center
-            justify-center
-            rounded-full
-            bg-red-500
-            text-[9px]
-            font-bold
-            text-white
-          "
-        >
-          !
-        </span>
-
-        {errors[field]}
-
-      </p>
-    );
-
+  // Change number
+  const changeNumber = () => {
+    resetRecaptcha();
+    setOtpSent(false);
+    setConfirmationResult(null);
+    setForm({ otp: "" });
+    setServerError("");
   };
-
-
-  /* =========================================================
-     UI
-  ========================================================= */
 
   return (
-    <div
-      className="
-        min-h-screen
-        bg-[#f5f5f5]
-        text-zinc-950
-      "
-    >
+    <div className="min-h-screen bg-[#F4F7FF] text-slate-900">
 
-      {/* =====================================================
-          HEADER
-      ===================================================== */}
+      {/* Background */}
+      <div className="pointer-events-none fixed inset-0 overflow-hidden">
+        <div className="absolute -top-40 -left-40 h-[500px] w-[500px] rounded-full bg-blue-200/30 blur-[120px]" />
+        <div className="absolute bottom-0 right-0 h-[450px] w-[450px] rounded-full bg-indigo-200/30 blur-[120px]" />
+      </div>
 
-      <header
-        className="
-          sticky
-          top-0
-          z-50
-          border-b
-          border-zinc-200
-          bg-white/95
-          backdrop-blur-xl
-        "
-      >
+      {/* Header */}
+      <header className="relative z-20 border-b border-blue-100/80 bg-white/80 backdrop-blur-xl">
+        <div className="mx-auto flex h-[72px] max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
 
-        <div
-          className="
-            mx-auto
-            flex
-            h-[64px]
-            max-w-7xl
-            items-center
-            justify-between
-            px-4
-            sm:h-[72px]
-            sm:px-6
-            lg:px-8
-          "
-        >
-
+          {/* Logo */}
           <button
             type="button"
-            onClick={() =>
-              navigate("/")
-            }
-            className="
-              group
-              flex
-              items-center
-              gap-3
-              rounded-2xl
-            "
+            onClick={() => navigate("/")}
+            className="flex items-center gap-3"
           >
-
-            <div
-              className="
-                flex
-                h-10
-                w-10
-                items-center
-                justify-center
-                overflow-hidden
-                rounded-xl
-                bg-white
-                ring-1
-                ring-zinc-200
-              "
-            >
-
+            <div className="h-11 w-11 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-blue-100">
               <img
                 src={ODIKART_LOGO}
                 alt="Odikart"
-                className="
-                  h-full
-                  w-full
-                  object-cover
-                "
+                className="h-full w-full object-cover"
               />
-
             </div>
-
 
             <div className="text-left">
-
-              <p
-                className="
-                  text-sm
-                  font-bold
-                  tracking-tight
-                  text-black
-                "
-              >
+              <p className="text-[17px] font-extrabold tracking-tight text-slate-900">
                 Odikart
               </p>
-
-              <p
-                className="
-                  text-[10px]
-                  font-medium
-                  text-zinc-500
-                "
-              >
+              <p className="text-[11px] font-medium text-slate-500">
                 Seller Portal
               </p>
-
             </div>
-
           </button>
 
-
+          {/* Register */}
           <Link
             to="/register"
-            className="
-              rounded-full
-              border
-              border-zinc-200
-              bg-white
-              px-4
-              py-2
-              text-xs
-              font-semibold
-              text-black
-              transition
-              hover:border-black
-              hover:bg-black
-              hover:text-white
-              sm:px-5
-              sm:py-2.5
-              sm:text-sm
-            "
+            className="inline-flex items-center gap-2 rounded-full bg-blue-50 px-4 py-2.5 text-xs font-bold text-blue-700 transition hover:bg-blue-100 sm:px-5 sm:text-sm"
           >
             Become a Seller
+            <ArrowRight size={15} />
           </Link>
-
         </div>
-
       </header>
 
+      {/* Main */}
+      <main className="relative z-10 mx-auto flex min-h-[calc(100vh-72px)] max-w-7xl items-center px-4 py-6 sm:px-6 sm:py-10 lg:px-8">
 
-      {/* =====================================================
-          MAIN
-      ===================================================== */}
+        <div className="grid w-full overflow-hidden rounded-[32px] border border-white bg-white shadow-[0_25px_80px_rgba(37,99,235,0.10)] lg:grid-cols-[1.05fr_0.95fr]">
 
-      <main
-        className="
-          mx-auto
-          w-full
-          max-w-7xl
-          px-3
-          py-4
-          sm:px-6
-          sm:py-8
-          lg:px-8
-          lg:py-10
-        "
-      >
-
-        <div
-          className="
-            grid
-            gap-5
-            lg:grid-cols-[minmax(0,1fr)_500px]
-            lg:items-stretch
-          "
-        >
-
-          {/* ===================================================
-              HERO
-          =================================================== */}
-
+          {/* Left Hero */}
           <section
-            data-aos="fade-up"
-            className="
-              relative
-              hidden
-              min-h-[650px]
-              overflow-hidden
-              rounded-[32px]
-              bg-black
-              lg:block
-            "
+            data-aos="fade-right"
+            className="relative hidden min-h-[720px] overflow-hidden lg:flex"
           >
+            {/* Gradient background */}
+            <div className="absolute inset-0 bg-gradient-to-br from-[#1D4ED8] via-[#2563EB] to-[#4F46E5]" />
 
-            <img
-              src="https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&w=1400&q=85"
-              alt="Odikart Seller Portal"
-              className="
-                absolute
-                inset-0
-                h-full
-                w-full
-                object-cover
-              "
-            />
+            {/* Decorative shapes */}
+            <div className="absolute -right-24 -top-24 h-[400px] w-[400px] rounded-full border border-white/10 bg-white/[0.04]" />
+            <div className="absolute -bottom-32 -left-24 h-[420px] w-[420px] rounded-full border border-white/10 bg-white/[0.04]" />
 
-            <div
-              className="
-                absolute
-                inset-0
-                bg-black/55
-              "
-            />
+            <div className="absolute right-20 top-28 h-52 w-52 rounded-full bg-blue-300/20 blur-3xl" />
+            <div className="absolute bottom-40 right-0 h-60 w-60 rounded-full bg-indigo-300/20 blur-3xl" />
 
-            <div
-              className="
-                absolute
-                inset-0
-                bg-gradient-to-t
-                from-black/95
-                via-black/50
-                to-black/10
-              "
-            />
+            {/* Hero Content */}
+            <div className="relative z-10 flex w-full flex-col justify-between p-10 xl:p-14">
 
-
-            <div
-              className="
-                relative
-                z-10
-                flex
-                min-h-[650px]
-                flex-col
-                justify-between
-                p-8
-                sm:p-10
-              "
-            >
-
+              {/* Brand */}
               <div className="flex items-center gap-3">
-
-                <div
-                  className="
-                    flex
-                    h-11
-                    w-11
-                    items-center
-                    justify-center
-                    overflow-hidden
-                    rounded-2xl
-                    bg-white
-                  "
-                >
-
+                <div className="h-12 w-12 overflow-hidden rounded-2xl bg-white p-1 shadow-xl shadow-blue-950/20">
                   <img
                     src={ODIKART_LOGO}
                     alt="Odikart"
-                    className="
-                      h-full
-                      w-full
-                      object-cover
-                    "
+                    className="h-full w-full rounded-xl object-cover"
                   />
-
                 </div>
 
-
                 <div>
-
                   <p className="text-sm font-bold text-white">
                     Odikart Seller
                   </p>
-
-                  <p className="text-xs text-white/60">
-                    Seller Portal
+                  <p className="text-xs text-blue-100/70">
+                    Seller workspace
                   </p>
-
                 </div>
-
               </div>
 
+              {/* Hero message */}
+              <div className="max-w-lg">
+                <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-2 backdrop-blur-md">
+                  <Sparkles size={14} className="text-blue-100" />
+                  <span className="text-[11px] font-semibold text-white">
+                    Your business, one step ahead
+                  </span>
+                </div>
 
-              <div>
-
-                <span
-                  className="
-                    inline-flex
-                    items-center
-                    gap-2
-                    rounded-full
-                    border
-                    border-white/15
-                    bg-black/30
-                    px-3
-                    py-1.5
-                    text-[10px]
-                    font-bold
-                    uppercase
-                    tracking-[0.18em]
-                    text-white/80
-                  "
-                >
-
-                  <span
-                    className="
-                      h-1.5
-                      w-1.5
-                      rounded-full
-                      bg-white
-                    "
-                  />
-
-                  Official Seller Portal
-
-                </span>
-
-
-                <h1
-                  className="
-                    mt-6
-                    text-4xl
-                    font-semibold
-                    leading-[1.02]
-                    tracking-[-0.045em]
-                    text-white
-                    sm:text-5xl
-                  "
-                >
-                  Welcome
+                <h1 className="text-5xl font-bold leading-[1.1] tracking-[-0.05em] text-white xl:text-6xl">
+                  Grow your
                   <br />
-                  back, seller.
+                  business with
+                  <br />
+                  <span className="text-blue-100">
+                    Odikart.
+                  </span>
                 </h1>
 
-
-                <p
-                  className="
-                    mt-5
-                    max-w-md
-                    text-sm
-                    leading-7
-                    text-white/70
-                  "
-                >
-                  Sign in to manage your products,
-                  orders, customers and store from
-                  one simple seller workspace.
+                <p className="mt-6 max-w-md text-sm leading-7 text-blue-50/80">
+                  Your products. Your orders. Your growth.
+                  Manage your entire selling journey from one
+                  powerful workspace.
                 </p>
 
-
-                <div
-                  className="
-                    mt-8
-                    grid
-                    grid-cols-3
-                    gap-3
-                  "
-                >
-
+                {/* Features */}
+                <div className="mt-10 grid grid-cols-3 gap-3">
                   {[
                     {
                       icon: BarChart3,
                       title: "Analytics",
-                      text: "Track sales",
+                      subtitle: "Track growth",
                     },
                     {
                       icon: Package,
                       title: "Products",
-                      text: "Manage stock",
+                      subtitle: "Manage inventory",
                     },
                     {
                       icon: Store,
                       title: "Store",
-                      text: "Grow business",
+                      subtitle: "Build business",
                     },
                   ].map((item) => {
-
-                    const Icon =
-                      item.icon;
+                    const Icon = item.icon;
 
                     return (
                       <div
-                        key={
-                          item.title
-                        }
-                        className="
-                          rounded-2xl
-                          border
-                          border-white/10
-                          bg-black/35
-                          p-4
-                        "
+                        key={item.title}
+                        className="rounded-2xl border border-white/10 bg-white/[0.10] p-4 backdrop-blur-lg transition hover:bg-white/[0.15]"
                       >
-
-                        <div
-                          className="
-                            flex
-                            h-9
-                            w-9
-                            items-center
-                            justify-center
-                            rounded-xl
-                            bg-white
-                            text-black
-                          "
-                        >
-
-                          <Icon
-                            size={17}
-                          />
-
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-blue-600 shadow-lg">
+                          <Icon size={18} />
                         </div>
 
-                        <p
-                          className="
-                            mt-3
-                            text-xs
-                            font-semibold
-                            text-white
-                          "
-                        >
+                        <p className="mt-4 text-xs font-bold text-white">
                           {item.title}
                         </p>
 
-                        <p
-                          className="
-                            mt-1
-                            text-[10px]
-                            text-white/50
-                          "
-                        >
-                          {item.text}
+                        <p className="mt-1 text-[10px] text-blue-100/70">
+                          {item.subtitle}
                         </p>
-
                       </div>
                     );
-
                   })}
-
                 </div>
 
+                {/* Trust */}
+                <div className="mt-8 flex items-center gap-3">
+                  <div className="flex -space-x-2">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-blue-500 bg-white text-[10px] font-bold text-blue-700">
+                      O
+                    </div>
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-blue-500 bg-blue-100 text-[10px] font-bold text-blue-700">
+                      S
+                    </div>
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-blue-500 bg-indigo-100 text-[10px] font-bold text-indigo-700">
+                      +
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-blue-100/80">
+                    Built for sellers. Designed for growth.
+                  </p>
+                </div>
               </div>
 
-            </div>
+              {/* Footer */}
+              <div className="flex items-center justify-between border-t border-white/10 pt-6">
+                <p className="text-[11px] text-blue-100/60">
+                  © Odikart Seller Portal
+                </p>
 
+                <div className="flex items-center gap-2 text-[11px] font-medium text-blue-100/80">
+                  <ShieldCheck size={14} />
+                  Secure platform
+                </div>
+              </div>
+            </div>
           </section>
 
-
-          {/* ===================================================
-              LOGIN PANEL
-          =================================================== */}
-
+          {/* Right Login Panel */}
           <section
-            data-aos="fade-up"
-            className="
-              flex
-              items-center
-              rounded-[28px]
-              border
-              border-zinc-200
-              bg-white
-              px-5
-              py-7
-              shadow-[0_8px_35px_rgba(0,0,0,0.06)]
-              sm:px-8
-              sm:py-10
-              lg:px-10
-            "
+            data-aos="fade-left"
+            className="flex min-h-[650px] items-center justify-center px-5 py-9 sm:px-10 lg:px-12 xl:px-16"
           >
+            <div className="w-full max-w-[440px]">
 
-            <div
-              className="
-                mx-auto
-                w-full
-                max-w-md
-              "
-            >
-
-              {/* MOBILE BRAND */}
-
-              <div
-                className="
-                  mb-7
-                  flex
-                  items-center
-                  gap-3
-                  lg:hidden
-                "
-              >
-
-                <div
-                  className="
-                    flex
-                    h-12
-                    w-12
-                    items-center
-                    justify-center
-                    overflow-hidden
-                    rounded-2xl
-                    bg-black
-                  "
-                >
-
+              {/* Mobile Brand */}
+              <div className="mb-8 flex items-center gap-3 lg:hidden">
+                <div className="h-12 w-12 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-blue-100">
                   <img
                     src={ODIKART_LOGO}
                     alt="Odikart"
-                    className="
-                      h-full
-                      w-full
-                      object-cover
-                    "
+                    className="h-full w-full object-cover"
                   />
-
                 </div>
-
 
                 <div>
-
-                  <p className="text-sm font-bold text-black">
+                  <p className="font-extrabold text-slate-900">
                     Odikart Seller
                   </p>
-
-                  <p className="text-xs text-zinc-400">
+                  <p className="text-xs text-slate-500">
                     Seller Portal
                   </p>
-
                 </div>
-
               </div>
 
-
-              {/* TITLE */}
-
+              {/* Login Heading */}
               <div>
-
-                <div
-                  className="
-                    inline-flex
-                    items-center
-                    gap-2
-                    rounded-full
-                    bg-zinc-100
-                    px-3
-                    py-1.5
-                    text-[10px]
-                    font-bold
-                    uppercase
-                    tracking-[0.16em]
-                    text-black
-                  "
-                >
-
-                  <span
-                    className="
-                      h-1.5
-                      w-1.5
-                      rounded-full
-                      bg-black
-                    "
-                  />
-
-                  Seller Login
-
+                <div className="inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-2 text-[11px] font-bold text-blue-700">
+                  <span className="h-1.5 w-1.5 rounded-full bg-blue-600" />
+                  {otpSent ? "PHONE VERIFICATION" : "SELLER LOGIN"}
                 </div>
 
-
-                <h2
-                  className="
-                    mt-5
-                    text-3xl
-                    font-semibold
-                    tracking-[-0.035em]
-                    text-black
-                    sm:text-4xl
-                  "
-                >
-                  Welcome back
+                <h2 className="mt-5 text-3xl font-bold tracking-[-0.045em] text-slate-900 sm:text-4xl">
+                  {otpSent ? "Verify your number" : "Welcome back"}
                 </h2>
 
-
-                <p
-                  className="
-                    mt-3
-                    text-sm
-                    leading-6
-                    text-zinc-500
-                  "
-                >
-                  Sign in with your Odikart account
-                  to access your approved seller workspace.
+                <p className="mt-3 text-sm leading-6 text-slate-500">
+                  {otpSent
+                    ? "Enter the verification code to securely access your seller account."
+                    : "Sign in to your Odikart seller account and continue growing your business."}
                 </p>
-
               </div>
 
-
-              {/* =================================================
-                  ERROR
-              ================================================= */}
-
+              {/* Error */}
               {serverError && (
-
                 <div
                   role="alert"
                   aria-live="assertive"
-                  className="
-                    mt-6
-                    rounded-2xl
-                    border
-                    border-red-200
-                    bg-red-50
-                    p-4
-                  "
+                  className="mt-6 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4"
                 >
-
-                  <div
-                    className="
-                      flex
-                      items-start
-                      gap-3
-                    "
-                  >
-
-                    <div
-                      className="
-                        flex
-                        h-9
-                        w-9
-                        shrink-0
-                        items-center
-                        justify-center
-                        rounded-xl
-                        bg-red-500
-                        text-white
-                      "
-                    >
-                      !
-                    </div>
-
-
-                    <div className="min-w-0 flex-1">
-
-                      <p
-                        className="
-                          text-sm
-                          font-bold
-                          text-red-900
-                        "
-                      >
-                        Unable to sign in
-                      </p>
-
-
-                      <p
-                        className="
-                          mt-1
-                          text-xs
-                          leading-5
-                          text-red-700
-                        "
-                      >
-                        {serverError}
-                      </p>
-
-                    </div>
-
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setServerError("")
-                      }
-                      className="
-                        flex
-                        h-7
-                        w-7
-                        items-center
-                        justify-center
-                        rounded-lg
-                        text-red-400
-                        hover:bg-red-100
-                      "
-                      aria-label="Dismiss error"
-                    >
-
-                      <X size={15} />
-
-                    </button>
-
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-red-100 text-red-600">
+                    !
                   </div>
 
-                </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-bold text-red-800">
+                      Unable to sign in
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-red-700">
+                      {serverError}
+                    </p>
+                  </div>
 
+                  <button
+                    type="button"
+                    onClick={() => setServerError("")}
+                    aria-label="Dismiss error"
+                    className="flex h-7 w-7 items-center justify-center rounded-lg text-red-400 transition hover:bg-red-100"
+                  >
+                    <X size={15} />
+                  </button>
+                </div>
               )}
 
-
-              {/* =================================================
-                  FORM
-              ================================================= */}
-
+              {/* Form */}
               <form
                 onSubmit={login}
                 noValidate
-                className="
-                  mt-7
-                  space-y-5
-                "
+                className="mt-8 space-y-5"
               >
 
-                {/* EMAIL */}
-
-                <div>
-
-                  <label
-                    htmlFor="email"
-                    className="
-                      mb-2
-                      block
-                      text-xs
-                      font-bold
-                      text-zinc-700
-                    "
-                  >
-                    Email address
-                  </label>
-
-
-                  <div className="relative">
-
-                    <Mail
-                      size={17}
-                      className="
-                        pointer-events-none
-                        absolute
-                        left-4
-                        top-1/2
-                        -translate-y-1/2
-                        text-zinc-400
-                      "
-                    />
-
-
-                    <input
-                      id="email"
-                      type="email"
-                      name="email"
-                      placeholder="seller@example.com"
-                      value={form.email}
-                      onChange={handleChange}
-                      autoComplete="email"
-                      required
-                      className={`
-                        pl-11
-                        ${inputClass("email")}
-                      `}
-                    />
-
-                  </div>
-
-
-                  <InputError
-                    field="email"
-                  />
-
-                </div>
-
-
-                {/* LOGIN METHOD */}
-
-                <div
-                  className="
-                    grid
-                    grid-cols-2
-                    gap-2
-                    rounded-2xl
-                    bg-zinc-100
-                    p-1
-                  "
-                >
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      changeLoginMethod(
-                        "password"
-                      )
-                    }
-                    className={`
-                      rounded-xl
-                      py-2.5
-                      text-xs
-                      font-semibold
-                      transition
-                      ${
-                        loginMethod ===
-                        "password"
-                          ? "bg-white text-black shadow-sm"
-                          : "text-zinc-500"
-                      }
-                    `}
-                  >
-                    Password
-                  </button>
-
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      changeLoginMethod(
-                        "otp"
-                      )
-                    }
-                    className={`
-                      rounded-xl
-                      py-2.5
-                      text-xs
-                      font-semibold
-                      transition
-                      ${
-                        loginMethod ===
-                        "otp"
-                          ? "bg-white text-black shadow-sm"
-                          : "text-zinc-500"
-                      }
-                    `}
-                  >
-                    OTP
-                  </button>
-
-                </div>
-
-
-                {/* =================================================
-                    PASSWORD
-                ================================================= */}
-
-                {loginMethod === "password" && (
-
-                  <div>
-
-                    <div
-                      className="
-                        mb-2
-                        flex
-                        items-center
-                        justify-between
-                      "
-                    >
-
+                {/* Phone Step */}
+                {!otpSent ? (
+                  <>
+                    <div>
                       <label
-                        htmlFor="password"
-                        className="
-                          text-xs
-                          font-bold
-                          text-zinc-700
-                        "
+                        htmlFor="seller-phone"
+                        className="mb-2 block text-sm font-semibold text-slate-700"
                       >
-                        Password
+                        Registered mobile number
                       </label>
 
-
-                      <Link
-                        to="/forgot-password"
-                        className="
-                          text-xs
-                          font-semibold
-                          text-zinc-500
-                          hover:text-black
-                        "
-                      >
-                        Forgot password?
-                      </Link>
-
-                    </div>
-
-
-                    <div className="relative">
-
-                      <LockKeyhole
-                        size={17}
-                        className="
-                          pointer-events-none
-                          absolute
-                          left-4
-                          top-1/2
-                          -translate-y-1/2
-                          text-zinc-400
-                        "
-                      />
-
-
-                      <input
-                        id="password"
-                        type={
-                          showPassword
-                            ? "text"
-                            : "password"
-                        }
-                        name="password"
-                        placeholder="Enter your password"
-                        value={form.password}
-                        onChange={handleChange}
-                        autoComplete="current-password"
-                        required
-                        className={`
-                          pl-11
-                          pr-12
-                          ${inputClass(
-                            "password"
-                          )}
-                        `}
-                      />
-
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setShowPassword(
-                            (prev) =>
-                              !prev
-                          )
-                        }
-                        className="
-                          absolute
-                          right-2
-                          top-1/2
-                          flex
-                          h-9
-                          w-9
-                          -translate-y-1/2
-                          items-center
-                          justify-center
-                          rounded-xl
-                          text-zinc-400
-                          hover:bg-zinc-100
-                          hover:text-black
-                        "
-                      >
-
-                        {showPassword ? (
-                          <EyeOff size={17} />
-                        ) : (
-                          <Eye size={17} />
-                        )}
-
-                      </button>
-
-                    </div>
-
-
-                    <InputError
-                      field="password"
-                    />
-
-                  </div>
-
-                )}
-
-
-                {/* =================================================
-                    OTP
-                ================================================= */}
-
-                {loginMethod === "otp" && (
-
-                  <div>
-
-                    <label
-                      htmlFor="otp"
-                      className="
-                        mb-2
-                        block
-                        text-xs
-                        font-bold
-                        text-zinc-700
-                      "
-                    >
-                      Login OTP
-                    </label>
-
-
-                    {!otpSent ? (
-
-                      <div
-                        className="
-                          space-y-3
-                        "
-                      >
-
-                        <div
-                          className="
-                            flex
-                            items-center
-                            gap-3
-                            rounded-2xl
-                            border
-                            border-zinc-200
-                            bg-zinc-50
-                            p-4
-                          "
-                        >
-
-                          <Smartphone
-                            size={19}
-                            className="
-                              shrink-0
-                              text-zinc-500
-                            "
-                          />
-
-                          <div>
-
-                            <p
-                              className="
-                                text-xs
-                                font-semibold
-                                text-zinc-800
-                              "
-                            >
-                              Login with OTP
-                            </p>
-
-                            <p
-                              className="
-                                mt-1
-                                text-[11px]
-                                leading-5
-                                text-zinc-500
-                              "
-                            >
-                              We'll send a one-time
-                              password to your registered
-                              email address.
-                            </p>
-
-                          </div>
-
+                      <div className="relative">
+                        <div className="pointer-events-none absolute left-4 top-1/2 flex -translate-y-1/2 items-center gap-2 text-slate-400">
+                          <Smartphone size={18} />
                         </div>
 
+                        <input
+                          id="seller-phone"
+                          type="tel"
+                          inputMode="tel"
+                          autoComplete="tel"
+                          value={phoneNumber}
+                          onChange={(e) => {
+                            setPhoneNumber(e.target.value);
+                            setServerError("");
+                          }}
+                          placeholder="Enter your mobile number"
+                          className="h-[58px] w-full rounded-2xl border border-slate-200 bg-slate-50 pl-12 pr-4 text-sm font-medium text-slate-900 outline-none transition-all placeholder:text-slate-400 hover:border-blue-200 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
+                        />
+                      </div>
+
+                      <p className="mt-2 text-xs text-slate-400">
+                        Use the mobile number linked to your seller account.
+                      </p>
+                    </div>
+
+                    {/* OTP Info */}
+                    <div className="flex items-start gap-3 rounded-2xl border border-blue-100 bg-blue-50/70 p-4">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-blue-600 shadow-sm">
+                        <Smartphone size={18} />
+                      </div>
+
+                      <div>
+                        <p className="text-sm font-semibold text-slate-800">
+                          Login with phone OTP
+                        </p>
+                        <p className="mt-1 text-xs leading-5 text-slate-500">
+                          We'll send a secure verification code to your mobile number.
+                        </p>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {/* OTP Sent */}
+                    <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-4">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-blue-600 shadow-sm">
+                          <CheckCircle2 size={19} />
+                        </div>
+
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-slate-800">
+                            Verification code sent
+                          </p>
+
+                          <p className="mt-1 break-all text-xs text-slate-500">
+                            Sent to {phoneNumber}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* OTP Input */}
+                    <div>
+                      <label
+                        htmlFor="otp"
+                        className="mb-2 block text-sm font-semibold text-slate-700"
+                      >
+                        Enter 6-digit OTP
+                      </label>
+
+                      <input
+                        id="otp"
+                        type="text"
+                        name="otp"
+                        inputMode="numeric"
+                        maxLength={6}
+                        autoComplete="one-time-code"
+                        placeholder="000000"
+                        value={form.otp}
+                        onChange={(e) => {
+                          const value = e.target.value
+                            .replace(/\D/g, "")
+                            .slice(0, 6);
+
+                          setForm((prev) => ({
+                            ...prev,
+                            otp: value,
+                          }));
+
+                          setServerError("");
+                        }}
+                        className="h-[64px] w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-center text-2xl font-bold tracking-[0.45em] text-blue-700 outline-none transition-all placeholder:text-slate-300 hover:border-blue-200 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
+                      />
+
+                      <div className="mt-4 flex items-center justify-between">
+                        <button
+                          type="button"
+                          onClick={changeNumber}
+                          className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 transition hover:text-blue-600"
+                        >
+                          <ArrowLeft size={13} />
+                          Change number
+                        </button>
 
                         <button
                           type="button"
-                          onClick={
-                            sendLoginOTP
-                          }
-                          disabled={
-                            otpLoading
-                          }
-                          className="
-                            h-12
-                            w-full
-                            rounded-2xl
-                            border
-                            border-zinc-200
-                            bg-zinc-50
-                            text-sm
-                            font-semibold
-                            text-black
-                            hover:border-black
-                            hover:bg-white
-                            disabled:opacity-50
-                          "
+                          onClick={sendLoginOTP}
+                          disabled={otpLoading}
+                          className="text-xs font-bold text-blue-600 transition hover:text-indigo-700 disabled:opacity-50"
                         >
-
-                          {otpLoading
-                            ? "Sending OTP..."
-                            : "Send OTP"}
-
+                          {otpLoading ? "Sending..." : "Resend OTP"}
                         </button>
-
                       </div>
-
-                    ) : (
-
-                      <div
-                        className="
-                          space-y-4
-                        "
-                      >
-
-                        <div
-                          className="
-                            rounded-2xl
-                            border
-                            border-zinc-200
-                            bg-zinc-50
-                            p-4
-                          "
-                        >
-
-                          <div
-                            className="
-                              flex
-                              items-center
-                              gap-3
-                            "
-                          >
-
-                            <div
-                              className="
-                                flex
-                                h-9
-                                w-9
-                                items-center
-                                justify-center
-                                rounded-xl
-                                bg-black
-                                text-white
-                              "
-                            >
-
-                              <Mail
-                                size={17}
-                              />
-
-                            </div>
-
-
-                            <div>
-
-                              <p
-                                className="
-                                  text-xs
-                                  font-semibold
-                                  text-black
-                                "
-                              >
-                                OTP sent
-                              </p>
-
-                              <p
-                                className="
-                                  mt-1
-                                  text-[11px]
-                                  text-zinc-500
-                                "
-                              >
-                                Check your registered
-                                email for the OTP.
-                              </p>
-
-                            </div>
-
-                          </div>
-
-                        </div>
-
-
-                        <input
-                          id="otp"
-                          type="text"
-                          name="otp"
-                          inputMode="numeric"
-                          maxLength={6}
-                          autoComplete="one-time-code"
-                          placeholder="Enter 6-digit OTP"
-                          value={form.otp}
-                          onChange={(e) => {
-
-                            const value =
-                              e.target.value
-                                .replace(
-                                  /\D/g,
-                                  ""
-                                )
-                                .slice(
-                                  0,
-                                  6
-                                );
-
-                            setForm(
-                              (prev) => ({
-                                ...prev,
-                                otp: value,
-                              })
-                            );
-
-                            setServerError("");
-
-                          }}
-                          className="
-                            h-14
-                            w-full
-                            rounded-2xl
-                            border
-                            border-zinc-200
-                            bg-zinc-50
-                            px-4
-                            text-center
-                            text-xl
-                            font-semibold
-                            tracking-[0.5em]
-                            text-black
-                            outline-none
-                            focus:border-black
-                            focus:bg-white
-                            focus:ring-4
-                            focus:ring-black/5
-                          "
-                        />
-
-
-                        <div
-                          className="
-                            flex
-                            items-center
-                            justify-between
-                          "
-                        >
-
-                          <button
-                            type="button"
-                            onClick={() => {
-
-                              setOtpSent(false);
-
-                              setForm(
-                                (prev) => ({
-                                  ...prev,
-                                  otp: "",
-                                })
-                              );
-
-                              setServerError("");
-
-                            }}
-                            className="
-                              text-xs
-                              font-semibold
-                              text-zinc-500
-                              hover:text-black
-                            "
-                          >
-                            Change email
-                          </button>
-
-
-                          <button
-                            type="button"
-                            onClick={
-                              sendLoginOTP
-                            }
-                            disabled={
-                              otpLoading
-                            }
-                            className="
-                              text-xs
-                              font-semibold
-                              text-black
-                              underline
-                              underline-offset-4
-                            "
-                          >
-                            {otpLoading
-                              ? "Sending..."
-                              : "Resend OTP"}
-                          </button>
-
-                        </div>
-
-                      </div>
-
-                    )}
-
-                  </div>
-
+                    </div>
+                  </>
                 )}
 
+                {/* reCAPTCHA */}
+                <div id="recaptcha-container" />
 
-                {/* =================================================
-                    SECURITY INFORMATION
-                   
-                    IMPORTANT:
-                    This is informational only.
-                    It is NOT the verification check.
-                ================================================= */}
-
-                <div
-                  className="
-                    flex
-                    items-start
-                    gap-3
-                    rounded-2xl
-                    border
-                    border-zinc-200
-                    bg-zinc-50
-                    p-4
-                  "
-                >
-
-                  <div
-                    className="
-                      flex
-                      h-9
-                      w-9
-                      shrink-0
-                      items-center
-                      justify-center
-                      rounded-xl
-                      bg-black
-                      text-white
-                    "
-                  >
-
-                    <ShieldCheck
-                      size={18}
-                    />
-
+                {/* Security Card */}
+                <div className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                    <ShieldCheck size={19} />
                   </div>
 
-
                   <div>
-
-                    <p
-                      className="
-                        text-xs
-                        font-semibold
-                        text-black
-                      "
-                    >
+                    <p className="text-sm font-semibold text-slate-800">
                       Secure seller access
                     </p>
 
-
-                    <p
-                      className="
-                        mt-1
-                        text-[11px]
-                        leading-5
-                        text-zinc-500
-                      "
-                    >
-                      Only approved and KYC-verified
-                      seller accounts can access the
-                      Seller Portal.
+                    <p className="mt-1 text-xs leading-5 text-slate-500">
+                      Only approved and KYC-verified seller accounts can access the Odikart Seller Portal.
                     </p>
-
                   </div>
-
                 </div>
 
-
-                {/* =================================================
-                    LOGIN BUTTON
-                ================================================= */}
-
+                {/* Submit Button */}
                 <button
                   type="submit"
-                  disabled={
-                    loading ||
-                    otpLoading
-                  }
-                  className="
-                    group
-                    flex
-                    h-12
-                    w-full
-                    items-center
-                    justify-center
-                    gap-2
-                    rounded-2xl
-                    bg-black
-                    px-5
-                    text-sm
-                    font-semibold
-                    text-white
-                    shadow-lg
-                    shadow-black/10
-                    transition-all
-                    hover:bg-zinc-800
-                    disabled:cursor-not-allowed
-                    disabled:opacity-50
-                  "
+                  disabled={loading || otpLoading}
+                  className="group relative flex h-[56px] w-full items-center justify-center gap-2 overflow-hidden rounded-2xl bg-gradient-to-r from-blue-600 via-blue-600 to-indigo-600 px-5 text-sm font-bold text-white shadow-lg shadow-blue-600/20 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-blue-600/25 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60"
                 >
+                  <span className="absolute inset-0 bg-white/0 transition group-hover:bg-white/10" />
 
-                  {loading ? (
-                    "Signing in..."
-                  ) : (
-                    <>
-                      {loginMethod === "otp" &&
-                      !otpSent
-                        ? "Send Login OTP"
-                        : loginMethod === "otp"
-                        ? "Verify OTP"
-                        : "Sign in to Seller Portal"}
+                  <span className="relative">
+                    {loading
+                      ? "Verifying your account..."
+                      : otpLoading
+                      ? "Sending verification code..."
+                      : !otpSent
+                      ? "Send verification code"
+                      : "Verify & Sign In"}
+                  </span>
 
-                      <ArrowRight
-                        size={17}
-                      />
-                    </>
+                  {!loading && !otpLoading && (
+                    <ArrowRight
+                      size={17}
+                      className="relative transition-transform group-hover:translate-x-1"
+                    />
                   )}
-
                 </button>
 
-
-                {/* =================================================
-                    REGISTER
-                ================================================= */}
-
-                <div
-                  className="
-                    text-center
-                    text-xs
-                    text-zinc-500
-                  "
-                >
-
-                  Don't have an Odikart account?
-
-                  {" "}
-
+                {/* Register */}
+                <div className="pt-1 text-center text-sm text-slate-500">
+                  Don't have an Odikart account?{" "}
                   <Link
                     to="/register"
-                    className="
-                      font-semibold
-                      text-black
-                      hover:underline
-                    "
+                    className="font-bold text-blue-600 transition hover:text-indigo-700"
                   >
                     Become a Seller
                   </Link>
-
                 </div>
 
-
-                {/* =================================================
-                    CUSTOMER ACCOUNT INFO
-                ================================================= */}
-
-                <div
-                  className="
-                    rounded-2xl
-                    border
-                    border-zinc-200
-                    bg-white
-                    p-4
-                  "
-                >
-
-                  <div
-                    className="
-                      flex
-                      items-start
-                      gap-3
-                    "
-                  >
-
-                    <Store
-                      size={18}
-                      className="
-                        mt-0.5
-                        shrink-0
-                        text-zinc-500
-                      "
-                    />
-
+                {/* Customer note */}
+                <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-blue-600 shadow-sm">
+                      <ShoppingBag size={18} />
+                    </div>
 
                     <div>
-
-                      <p
-                        className="
-                          text-xs
-                          font-semibold
-                          text-zinc-800
-                        "
-                      >
+                      <p className="text-sm font-semibold text-slate-800">
                         Already an Odikart customer?
                       </p>
 
-
-                      <p
-                        className="
-                          mt-1
-                          text-[11px]
-                          leading-5
-                          text-zinc-500
-                        "
-                      >
-                        You don't need to create another
-                        account. Apply for seller access
-                        using your existing Odikart account.
+                      <p className="mt-1 text-xs leading-5 text-slate-500">
+                        You don't need another account. Apply for seller access using your existing Odikart account.
                       </p>
-
                     </div>
-
                   </div>
-
                 </div>
-
               </form>
 
+              {/* Footer */}
+              <div className="mt-7 flex items-center justify-center gap-2 text-[11px] text-slate-400">
+                <ShieldCheck size={13} />
+                Your information is protected and encrypted.
+              </div>
+
             </div>
-
           </section>
-
         </div>
-
       </main>
-
     </div>
   );
 }
-
 
 export default Login;

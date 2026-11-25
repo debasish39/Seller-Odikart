@@ -3,8 +3,6 @@ import { useNavigate } from "react-router-dom";
 import {
   ArrowRight,
   Check,
-  Eye,
-  EyeOff,
   Mail,
   Phone,
   User,
@@ -17,6 +15,7 @@ import {
 import AOS from "aos";
 import "aos/dist/aos.css";
 import api from "../../services/api";
+import { sendPhoneOTP, verifyPhoneOTP, resetRecaptcha } from "../../phoneAuth";
 
 /*
 |--------------------------------------------------------------------------
@@ -35,24 +34,20 @@ function Register() {
     lastName: "",
     email: "",
     phone: "",
-    password: "",
   });
 
   const [errors, setErrors] = useState({});
   const [serverError, setServerError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-
-  // Account lookup state
-  const [checkingAccount, setCheckingAccount] = useState(false);
   const [accountChecked, setAccountChecked] = useState(false);
   const [accountExists, setAccountExists] = useState(false);
   const [existingUser, setExistingUser] = useState(null);
 
-  // Existing-account login OTP state
-  const [loginOtpSent, setLoginOtpSent] = useState(false);
-  const [loginOtp, setLoginOtp] = useState("");
-  const [loginOtpLoading, setLoginOtpLoading] = useState(false);
+  // Firebase phone OTP authentication state
+  const [phoneOtpSent, setPhoneOtpSent] = useState(false);
+  const [phoneOtp, setPhoneOtp] = useState("");
+  const [phoneOtpLoading, setPhoneOtpLoading] = useState(false);
+  const [confirmationResult, setConfirmationResult] = useState(null);
 
   // Seller application state
   const [showSellerApplication, setShowSellerApplication] =
@@ -124,579 +119,176 @@ function Register() {
     return () => clearTimeout(timer);
   }, [serverError]);
 
-  /*
-  |--------------------------------------------------------------------------
-  | FORM CHANGE
-  |--------------------------------------------------------------------------
-  */
-
   const handleChange = (e) => {
     const { name, value } = e.target;
-
-    setForm((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
-
-    setErrors((prev) => ({
-      ...prev,
-      [name]: "",
-    }));
-
+    setForm((prev) => ({ ...prev, [name]: value }));
+    setErrors((prev) => ({ ...prev, [name]: "" }));
     setServerError("");
-
-    // A changed email invalidates the previous account lookup.
-    if (name === "email") {
-      setAccountChecked(false);
-      setAccountExists(false);
-      setExistingUser(null);
-    }
   };
 
-  /*
-  |--------------------------------------------------------------------------
-  | CHECK EXISTING ACCOUNT
-  |--------------------------------------------------------------------------
-  */
+  const normalizePhone = (value) => {
+    const digits = String(value || "").replace(/\D/g, "");
+    if (digits.length === 10) return `+91${digits}`;
+    if (digits.length === 12 && digits.startsWith("91")) return `+${digits}`;
+    if (String(value || "").trim().startsWith("+")) return `+${digits}`;
+    return `+${digits}`;
+  };
 
-  const checkAccount = async () => {
-    console.group("🔎 [SELLER] CHECK ACCOUNT");
+  const validatePhoneForm = () => {
+    const next = {};
+    if (!form.firstName.trim()) next.firstName = "First name is required.";
+    if (!form.lastName.trim()) next.lastName = "Last name is required.";
+    const rawPhone = form.phone.replace(/\D/g, "");
+    if (!(rawPhone.length === 10 || (rawPhone.length === 12 && rawPhone.startsWith("91")))) {
+      next.phone = "Enter a valid 10-digit Indian mobile number.";
+    }
+    if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+      next.email = "Enter a valid email address.";
+    }
+    setErrors(next);
+    return Object.keys(next).length === 0;
+  };
 
+  const sendPhoneVerification = async (e) => {
+    e?.preventDefault?.();
     setServerError("");
-    setErrors((prev) => ({
-      ...prev,
-      email: "",
-    }));
-
-    setAccountChecked(false);
-    setAccountExists(false);
-    setExistingUser(null);
-
-    const email = form.email.trim().toLowerCase();
-
-    if (!email) {
-      setErrors((prev) => ({
-        ...prev,
-        email: "Email address is required.",
-      }));
-
-      console.groupEnd();
-      return;
-    }
-
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setErrors((prev) => ({
-        ...prev,
-        email: "Enter a valid email address.",
-      }));
-
-      console.groupEnd();
-      return;
-    }
-
+    if (!validatePhoneForm()) return;
     try {
-      setCheckingAccount(true);
-
-      const response = await api.get(
-        "/auth/check-account",
-        {
-          params: { email },
-        }
-      );
-
-      const data = response.data;
-
-      setAccountChecked(true);
-
-      if (data?.exists && data?.user) {
-        setAccountExists(true);
-        setExistingUser(data.user);
-
-        setForm((prev) => ({
-          ...prev,
-          firstName: data.user.firstName || "",
-          lastName: data.user.lastName || "",
-          email: data.user.email || email,
-          phone: data.user.phone || "",
-        }));
-
-        console.log("✅ ACCOUNT FOUND");
-
-        console.groupEnd();
-        return;
-      }
-
-      setAccountExists(false);
-      setExistingUser(null);
-
-      console.log("🆕 NO ACCOUNT FOUND");
+      setPhoneOtpLoading(true);
+      const result = await sendPhoneOTP(normalizePhone(form.phone));
+      setConfirmationResult(result);
+      setPhoneOtpSent(true);
+      setPhoneOtp("");
+      setServerError("OTP sent to your mobile number.");
     } catch (error) {
-      console.error(
-        "❌ CHECK ACCOUNT FAILED:",
-        error
-      );
-
-      setServerError(
-        error.response?.data?.message ||
-          "Unable to check this email. Please try again."
-      );
+      console.error("Firebase phone OTP send error:", error);
+      setServerError(error?.message || "Unable to send OTP. Please try again.");
     } finally {
-      setCheckingAccount(false);
-      console.groupEnd();
+      setPhoneOtpLoading(false);
     }
   };
 
-  /*
-  |--------------------------------------------------------------------------
-  | PASSWORD STRENGTH
-  |--------------------------------------------------------------------------
-  */
-
-  const passwordStrength = useMemo(() => {
-    const password = form.password;
-
-    if (!password) {
-      return {
-        label: "",
-        width: "0%",
-        className: "bg-zinc-200",
-      };
-    }
-
-    let score = 0;
-
-    if (password.length >= 6) score++;
-    if (password.length >= 10) score++;
-    if (/[A-Z]/.test(password)) score++;
-    if (/[0-9]/.test(password)) score++;
-    if (/[^A-Za-z0-9]/.test(password)) score++;
-
-    if (score <= 2) {
-      return {
-        label: "Weak",
-        width: "35%",
-        className: "bg-zinc-400",
-      };
-    }
-
-    if (score <= 3) {
-      return {
-        label: "Good",
-        width: "65%",
-        className: "bg-zinc-600",
-      };
-    }
-
-    return {
-      label: "Strong",
-      width: "100%",
-      className: "bg-black",
-    };
-  }, [form.password]);
-
-  /*
-  |--------------------------------------------------------------------------
-  | REGISTER FORM VALIDATION
-  |--------------------------------------------------------------------------
-  */
-
-  const validateForm = () => {
-    const nextErrors = {};
-
-    const firstName = form.firstName.trim();
-    const lastName = form.lastName.trim();
-    const email = form.email.trim().toLowerCase();
-    const phone = form.phone.trim();
-
-    if (!firstName) {
-      nextErrors.firstName =
-        "First name is required.";
-    } else if (firstName.length < 2) {
-      nextErrors.firstName =
-        "First name must be at least 2 characters.";
-    }
-
-    if (!lastName) {
-      nextErrors.lastName =
-        "Last name is required.";
-    } else if (lastName.length < 2) {
-      nextErrors.lastName =
-        "Last name must be at least 2 characters.";
-    }
-
-    if (!email) {
-      nextErrors.email =
-        "Email address is required.";
-    } else if (
-      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
-    ) {
-      nextErrors.email =
-        "Enter a valid email address.";
-    }
-
-    if (!phone) {
-      nextErrors.phone =
-        "Phone number is required.";
-    } else if (
-      !/^[+]?[0-9\s()-]{10,16}$/.test(phone)
-    ) {
-      nextErrors.phone =
-        "Enter a valid phone number.";
-    }
-
-    if (!form.password) {
-      nextErrors.password =
-        "Password is required.";
-    } else if (form.password.length < 6) {
-      nextErrors.password =
-        "Password must be at least 6 characters.";
-    }
-
-    setErrors(nextErrors);
-
-    return Object.keys(nextErrors).length === 0;
-  };
-
-  /*
-  |--------------------------------------------------------------------------
-  | APPLY AS SELLER
-  |--------------------------------------------------------------------------
-  */
 
   const handleApplyAsSeller = () => {
-    console.group(
-      "🏪 [SELLER] APPLY AS SELLER"
-    );
-
     if (!existingUser) {
-      setServerError(
-        "Please login before applying to become a seller."
-      );
-
-      console.groupEnd();
+      setServerError("Verify your phone number to continue.");
       return;
     }
-
-    const token =
-      localStorage.getItem("token");
-
+    const token = localStorage.getItem("token");
     if (!token) {
-      setLoginOtpSent(false);
-      setLoginOtp("");
-
-      setServerError(
-        "Please verify the login OTP before applying as a seller."
-      );
-
-      sendExistingAccountLoginOTP();
-
-      console.groupEnd();
+      setServerError("Please verify your phone number first.");
       return;
     }
-
-    const sellerStatus =
-      existingUser.sellerStatus || "none";
-
-    if (
-      existingUser.role === "seller" &&
-      sellerStatus === "approved"
-    ) {
-      setServerError(
-        "This account is already an approved seller account."
-      );
-
-      console.groupEnd();
+    const sellerStatus = existingUser.sellerStatus || "none";
+    if (existingUser.role === "seller" && sellerStatus === "approved") {
+      setServerError("This account is already an approved seller account.");
       return;
     }
-
     if (sellerStatus === "pending") {
-      setServerError(
-        "Your seller application is already under review."
-      );
-
-      console.groupEnd();
+      setServerError("Your seller application is already under review.");
       return;
     }
-
     if (sellerStatus === "suspended") {
-      setServerError(
-        "Your seller account is suspended. Please contact support."
-      );
-
-      console.groupEnd();
+      setServerError("Your seller account is suspended. Please contact support.");
       return;
     }
-
-    const ownerName =
-      `${existingUser.firstName || ""} ${
-        existingUser.lastName || ""
-      }`.trim();
-
+    const ownerName = `${existingUser.firstName || form.firstName || ""} ${existingUser.lastName || form.lastName || ""}`.trim();
     setSellerForm({
-      shopName:
-        existingUser.store?.shopName || "",
-      description:
-        existingUser.store?.description || "",
-      website:
-        existingUser.store?.website || "",
-      supportEmail:
-        existingUser.store?.supportEmail ||
-        existingUser.email ||
-        "",
-      supportPhone:
-        existingUser.store?.supportPhone ||
-        existingUser.phone ||
-        "",
-      businessType:
-        existingUser.business?.businessType ||
-        "Individual",
-      ownerName:
-        existingUser.business?.ownerName ||
-        ownerName,
-      registrationNumber:
-        existingUser.business?.registrationNumber ||
-        "",
+      shopName: existingUser.store?.shopName || "",
+      description: existingUser.store?.description || "",
+      website: existingUser.store?.website || "",
+      supportEmail: existingUser.store?.supportEmail || existingUser.email || form.email || "",
+      supportPhone: existingUser.store?.supportPhone || existingUser.phone || form.phone || "",
+      businessType: existingUser.business?.businessType || "Individual",
+      ownerName: existingUser.business?.ownerName || ownerName,
+      registrationNumber: existingUser.business?.registrationNumber || "",
     });
-
-    /*
-    |--------------------------------------------------------------------------
-    | RESET DOCUMENT INPUTS
-    |--------------------------------------------------------------------------
-    */
-
-    setSellerDocuments({
-      aadhaarFront: null,
-      aadhaarBack: null,
-      panImage: null,
-      bankProof: null,
-    });
-
+    setSellerDocuments({ aadhaarFront: null, aadhaarBack: null, panImage: null, bankProof: null });
     setDocumentErrors({});
     setSellerErrors({});
     setServerError("");
     setShowSellerApplication(true);
-
-    console.log(
-      "✅ Seller application form opened"
-    );
-
-    console.groupEnd();
   };
 
-  /*
-  |--------------------------------------------------------------------------
-  | LOGIN OTP
-  |--------------------------------------------------------------------------
-  */
 
-  const sendExistingAccountLoginOTP =
-    async () => {
-      const email = String(
-        form.email || ""
-      )
-        .trim()
-        .toLowerCase();
-
-      if (!email) {
-        setServerError(
-          "Please enter your registered email address."
-        );
-
-        return;
-      }
-
+  const verifyPhoneAndContinue = async (e) => {
+    e.preventDefault();
+    const code = phoneOtp.replace(/\D/g, "").slice(0, 6);
+    if (!confirmationResult || !/^\d{6}$/.test(code)) {
+      setServerError("Enter the 6-digit OTP sent to your phone.");
+      return;
+    }
+    try {
+      setPhoneOtpLoading(true);
+      setServerError("");
+      const verified = await verifyPhoneOTP(confirmationResult, code);
+      const firebaseToken = verified.firebaseToken;
+      // Customer-mode Firebase login safely creates/links the account for seller application.
+      let response;
       try {
-        setLoginOtpLoading(true);
-        setServerError("");
-
-        const response = await api.post(
-          "/auth/signin-otp",
-          { email }
-        );
-
-        if (!response.data?.success) {
-          setServerError(
-            response.data?.message ||
-              "Unable to send login OTP."
-          );
-
-          return;
-        }
-
-        setLoginOtpSent(true);
-        setLoginOtp("");
-
-        setServerError(
-          "Login OTP sent to your registered email."
-        );
-      } catch (error) {
-        console.error(
-          "❌ SEND LOGIN OTP FAILED:",
-          error
-        );
-
-        setServerError(
-          error.response?.data?.message ||
-            "Unable to send login OTP. Please try again."
-        );
-      } finally {
-        setLoginOtpLoading(false);
+        response = await api.post("/auth/firebase-phone-login", { app: "customer" }, {
+          headers: { Authorization: `Bearer ${firebaseToken}` },
+        });
+      } catch (customerLoginError) {
+        // If the phone belongs to an approved seller, attempt seller-mode login.
+        response = await api.post("/auth/firebase-phone-login", { app: "seller" }, {
+          headers: { Authorization: `Bearer ${firebaseToken}` },
+        });
       }
-    };
-
-  /*
-  |--------------------------------------------------------------------------
-  | VERIFY LOGIN OTP
-  |--------------------------------------------------------------------------
-  */
-
-  const verifyExistingAccountLoginOTP =
-    async (e) => {
-      e.preventDefault();
-
-      const email = String(
-        form.email || ""
-      )
-        .trim()
-        .toLowerCase();
-
-      const otp = String(
-        loginOtp || ""
-      )
-        .replace(/\D/g, "")
-        .slice(0, 6);
-
-      if (!email) {
-        setServerError(
-          "Email address is required."
-        );
-
+      const data = response.data;
+      if (!data?.success || !data?.token) throw new Error(data?.message || "Phone login failed.");
+      localStorage.setItem("token", data.token);
+      const authUser = data.user || {};
+      const mergedUser = {
+        ...authUser,
+        firstName: authUser.firstName || form.firstName.trim(),
+        lastName: authUser.lastName || form.lastName.trim(),
+        email: authUser.email || form.email.trim().toLowerCase(),
+        phone: authUser.phone || normalizePhone(form.phone),
+      };
+      setExistingUser(mergedUser);
+      setAccountExists(true);
+      setAccountChecked(true);
+      setPhoneOtpSent(false);
+      setPhoneOtp("");
+      setConfirmationResult(null);
+      setForm((prev) => ({ ...prev, phone: mergedUser.phone, firstName: mergedUser.firstName, lastName: mergedUser.lastName, email: mergedUser.email }));
+      if (mergedUser.role === "seller" && mergedUser.sellerStatus === "approved") {
+        navigate("/seller/dashboard");
         return;
       }
-
-      if (!/^\d{6}$/.test(otp)) {
-        setServerError(
-          "Please enter the 6-digit OTP."
-        );
-
+      if (mergedUser.sellerStatus === "pending") {
+        setServerError("Your seller application is already under review.");
         return;
       }
+      handleApplyAsSellerAfterAuth(mergedUser);
+    } catch (error) {
+      console.error("Phone OTP verification/login failed:", error);
+      setServerError(error?.response?.data?.message || error?.message || "OTP verification failed. Please try again.");
+    } finally {
+      setPhoneOtpLoading(false);
+    }
+  };
 
-      try {
-        setLoginOtpLoading(true);
-        setServerError("");
 
-        const response = await api.post(
-          "/auth/verify-signin-otp",
-          {
-            email,
-            otp,
-          }
-        );
+  const handleApplyAsSellerAfterAuth = (user) => {
+    const ownerName = `${user.firstName || form.firstName || ""} ${user.lastName || form.lastName || ""}`.trim();
+    setSellerForm({
+      shopName: user.store?.shopName || "",
+      description: user.store?.description || "",
+      website: user.store?.website || "",
+      supportEmail: user.store?.supportEmail || user.email || form.email || "",
+      supportPhone: user.store?.supportPhone || user.phone || form.phone || "",
+      businessType: user.business?.businessType || "Individual",
+      ownerName: user.business?.ownerName || ownerName,
+      registrationNumber: user.business?.registrationNumber || "",
+    });
+    setSellerDocuments({ aadhaarFront: null, aadhaarBack: null, panImage: null, bankProof: null });
+    setDocumentErrors({});
+    setSellerErrors({});
+    setShowSellerApplication(true);
+  };
 
-        if (!response.data?.success) {
-          setServerError(
-            response.data?.message ||
-              "Invalid login OTP."
-          );
-
-          return;
-        }
-
-        const token =
-          response.data?.token;
-
-        if (!token) {
-          setServerError(
-            "Login succeeded but no authentication token was returned."
-          );
-
-          return;
-        }
-
-        localStorage.setItem(
-          "token",
-          token
-        );
-
-        const authenticatedUser =
-          response.data?.user ||
-          existingUser;
-
-        setExistingUser(
-          authenticatedUser
-        );
-
-        setAccountExists(true);
-        setLoginOtpSent(false);
-        setLoginOtp("");
-
-        setServerError("");
-
-        const ownerName =
-          `${authenticatedUser?.firstName || ""} ${
-            authenticatedUser?.lastName || ""
-          }`.trim();
-
-        setSellerForm({
-          shopName:
-            authenticatedUser?.store?.shopName ||
-            "",
-          description:
-            authenticatedUser?.store?.description ||
-            "",
-          website:
-            authenticatedUser?.store?.website ||
-            "",
-          supportEmail:
-            authenticatedUser?.store?.supportEmail ||
-            authenticatedUser?.email ||
-            email,
-          supportPhone:
-            authenticatedUser?.store?.supportPhone ||
-            authenticatedUser?.phone ||
-            "",
-          businessType:
-            authenticatedUser?.business?.businessType ||
-            "Individual",
-          ownerName:
-            authenticatedUser?.business?.ownerName ||
-            ownerName,
-          registrationNumber:
-            authenticatedUser?.business?.registrationNumber ||
-            "",
-        });
-
-        /*
-        |--------------------------------------------------------------------------
-        | RESET DOCUMENTS
-        |--------------------------------------------------------------------------
-        */
-
-        setSellerDocuments({
-          aadhaarFront: null,
-          aadhaarBack: null,
-          panImage: null,
-          bankProof: null,
-        });
-
-        setDocumentErrors({});
-        setSellerErrors({});
-        setShowSellerApplication(true);
-      } catch (error) {
-        console.error(
-          "❌ VERIFY LOGIN OTP FAILED:",
-          error
-        );
-
-        setServerError(
-          error.response?.data?.message ||
-            "Unable to verify login OTP. Please try again."
-        );
-      } finally {
-        setLoginOtpLoading(false);
-      }
-    };
 
   /*
   |--------------------------------------------------------------------------
@@ -1188,138 +780,9 @@ function Register() {
 
   const registerSeller = async (e) => {
     e.preventDefault();
-
-    console.group(
-      "🚀 [SELLER] REGISTER SELLER"
-    );
-
     setServerError("");
-
-    /*
-    |--------------------------------------------------------------------------
-    | EXISTING ACCOUNT
-    |--------------------------------------------------------------------------
-    */
-
-    if (
-      accountExists &&
-      existingUser
-    ) {
-      if (
-        existingUser.role ===
-          "seller" &&
-        existingUser.sellerStatus ===
-          "approved"
-      ) {
-        setServerError(
-          "This account is already an approved seller account."
-        );
-
-        console.groupEnd();
-        return;
-      }
-
-      if (
-        existingUser.sellerStatus ===
-        "pending"
-      ) {
-        setServerError(
-          "This seller application is already under review."
-        );
-
-        console.groupEnd();
-        return;
-      }
-
-      handleApplyAsSeller();
-
-      console.groupEnd();
-      return;
-    }
-
-    /*
-    |--------------------------------------------------------------------------
-    | NEW ACCOUNT
-    |--------------------------------------------------------------------------
-    */
-
-    if (!accountChecked) {
-      setServerError(
-        "Please check your email first."
-      );
-
-      console.groupEnd();
-      return;
-    }
-
-    if (!validateForm()) {
-      console.groupEnd();
-      return;
-    }
-
-    const firstName =
-      form.firstName.trim();
-
-    const lastName =
-      form.lastName.trim();
-
-    const email =
-      form.email
-        .trim()
-        .toLowerCase();
-
-    const phone =
-      form.phone.trim();
-
-    try {
-      setLoading(true);
-
-      const response =
-        await api.post(
-          "/auth/signup",
-          {
-            firstName,
-            lastName,
-            email,
-            phone,
-            password:
-              form.password,
-            role: "seller",
-          }
-        );
-
-      console.log(
-        "✅ ACCOUNT CREATED:",
-        response.data
-      );
-
-      navigate(
-        "/verify-signup-otp",
-        {
-          state: {
-            email,
-            role: "seller",
-          },
-        }
-      );
-    } catch (error) {
-      console.error(
-        "❌ SIGNUP REQUEST FAILED:",
-        error
-      );
-
-      const message =
-        error.response?.data
-          ?.message ||
-        error.response?.data
-          ?.error ||
-        "Unable to create your seller account. Please try again.";
-
-      setServerError(message);
-    } finally {
-      setLoading(false);
-      console.groupEnd();
-    }
+    if (!validatePhoneForm()) return;
+    await sendPhoneVerification();
   };
 
   /*
@@ -1333,7 +796,7 @@ function Register() {
     w-full
     rounded-2xl
     border
-    bg-zinc-50
+    bg-[#f8faff]
     px-4
     text-sm
     font-medium
@@ -1343,15 +806,15 @@ function Register() {
     placeholder:text-zinc-400
     hover:border-zinc-300
     focus:bg-white
-    focus:border-black
+    focus:border-[#2563EB]
     focus:ring-4
-    focus:ring-black/5
+    focus:ring-[#2563EB]/10
 
     ${
       errors[field]
         ? `
           border-zinc-900
-          bg-zinc-50
+          bg-[#f8faff]
           focus:ring-zinc-900/10
         `
         : `
@@ -1453,7 +916,7 @@ function Register() {
             items-center
             rounded-2xl
             border
-            bg-zinc-50
+            bg-[#f8faff]
             px-4
             py-3
             transition
@@ -1484,7 +947,7 @@ function Register() {
                     truncate
                     text-xs
                     font-semibold
-                    text-black
+                    text-slate-900
                   "
                 >
                   {file.name}
@@ -1529,7 +992,7 @@ function Register() {
             className="
               ml-3
               rounded-full
-              bg-black
+              bg-[#2563EB]
               px-3
               py-2
               text-[10px]
@@ -1569,10 +1032,26 @@ function Register() {
     <div
       className="
         min-h-screen
-        bg-[#f5f5f5]
+        bg-[#f7f8fc]
         text-zinc-950
       "
     >
+      {/* Firebase invisible reCAPTCHA host: must stay mounted in the DOM */}
+      <div
+        id="recaptcha-container"
+        aria-hidden="true"
+        style={{
+          position: "fixed",
+          left: 0,
+          bottom: 0,
+          width: 1,
+          height: 1,
+          opacity: 0,
+          pointerEvents: "none",
+          zIndex: -1,
+        }}
+      />
+
       {/* =========================================================
           HEADER
       ========================================================= */}
@@ -1650,7 +1129,7 @@ function Register() {
                   text-sm
                   font-bold
                   tracking-tight
-                  text-black
+                  text-slate-900
                   sm:text-[15px]
                 "
               >
@@ -1684,10 +1163,10 @@ function Register() {
               py-2
               text-xs
               font-semibold
-              text-black
+              text-slate-900
               transition
-              hover:border-black
-              hover:bg-black
+              hover:border-[#2563EB]
+              hover:bg-[#2563EB]
               hover:text-white
               active:scale-95
               sm:px-5
@@ -1737,7 +1216,7 @@ function Register() {
               min-h-[650px]
               overflow-hidden
               rounded-[32px]
-              bg-black
+              bg-[#2563EB]
               lg:block
             "
           >
@@ -2037,7 +1516,7 @@ function Register() {
                             justify-center
                             rounded-xl
                             bg-white
-                            text-black
+                            text-slate-900
                           "
                         >
                           <Icon size={17} />
@@ -2084,7 +1563,7 @@ function Register() {
               border
               border-zinc-200
               bg-white
-              shadow-[0_8px_35px_rgba(0,0,0,0.06)]
+              shadow-[0_12px_45px_rgba(37,99,235,0.08)]
             "
           >
             {/* CARD HEADER */}
@@ -2115,7 +1594,7 @@ function Register() {
                     justify-center
                     overflow-hidden
                     rounded-2xl
-                    bg-black
+                    bg-[#2563EB]
                   "
                 >
                   <img
@@ -2134,7 +1613,7 @@ function Register() {
                     className="
                       text-sm
                       font-bold
-                      text-black
+                      text-slate-900
                     "
                   >
                     Become a seller
@@ -2157,7 +1636,7 @@ function Register() {
                   text-2xl
                   font-semibold
                   tracking-[-0.03em]
-                  text-black
+                  text-slate-900
                   sm:text-3xl
                 "
               >
@@ -2194,7 +1673,7 @@ function Register() {
                   rounded-2xl
                   border
                   border-zinc-200
-                  bg-zinc-50
+                  bg-[#f8faff]
                   p-4
                   sm:mx-8
                 "
@@ -2208,7 +1687,7 @@ function Register() {
                     items-center
                     justify-center
                     rounded-full
-                    bg-black
+                    bg-[#2563EB]
                     text-sm
                     font-bold
                     text-white
@@ -2222,7 +1701,7 @@ function Register() {
                     className="
                       text-sm
                       font-semibold
-                      text-black
+                      text-slate-900
                     "
                   >
                     {accountExists
@@ -2257,175 +1736,13 @@ function Register() {
                     text-zinc-400
                     transition
                     hover:bg-white
-                    hover:text-black
+                    hover:text-slate-900
                   "
                 >
                   <X size={15} />
                 </button>
               </div>
             )}
-
-            {/* =====================================================
-                LOGIN OTP
-            ===================================================== */}
-
-            {accountExists &&
-              existingUser &&
-              loginOtpSent &&
-              !localStorage.getItem(
-                "token"
-              ) && (
-                <div
-                  className="
-                    mx-5
-                    mt-5
-                    rounded-2xl
-                    border
-                    border-zinc-200
-                    bg-white
-                    p-5
-                    sm:mx-8
-                    sm:p-6
-                  "
-                >
-                  <p
-                    className="
-                      text-[10px]
-                      font-semibold
-                      uppercase
-                      tracking-[0.18em]
-                      text-zinc-400
-                    "
-                  >
-                    Account verification
-                  </p>
-
-                  <h3
-                    className="
-                      mt-1
-                      text-xl
-                      font-semibold
-                      tracking-tight
-                      text-black
-                    "
-                  >
-                    Verify your login
-                  </h3>
-
-                  <p
-                    className="
-                      mt-2
-                      text-xs
-                      leading-5
-                      text-zinc-500
-                    "
-                  >
-                    We found your existing account.
-                    Enter the 6-digit OTP sent to
-                    your registered email to login
-                    and continue with your seller
-                    application.
-                  </p>
-
-                  <form
-                    onSubmit={
-                      verifyExistingAccountLoginOTP
-                    }
-                    className="mt-5 space-y-4"
-                  >
-                    <input
-                      value={loginOtp}
-                      onChange={(e) => {
-                        const value =
-                          e.target.value
-                            .replace(
-                              /\D/g,
-                              ""
-                            )
-                            .slice(0, 6);
-
-                        setLoginOtp(value);
-                      }}
-                      inputMode="numeric"
-                      autoComplete="one-time-code"
-                      maxLength={6}
-                      placeholder="Enter 6-digit OTP"
-                      className="
-                        h-12
-                        w-full
-                        rounded-2xl
-                        border
-                        border-zinc-200
-                        bg-zinc-50
-                        px-4
-                        text-center
-                        text-lg
-                        font-semibold
-                        tracking-[0.35em]
-                        text-black
-                        outline-none
-                        focus:border-black
-                        focus:bg-white
-                        focus:ring-4
-                        focus:ring-black/5
-                      "
-                    />
-
-                    <button
-                      type="submit"
-                      disabled={
-                        loginOtpLoading ||
-                        loginOtp.length !== 6
-                      }
-                      className="
-                        flex
-                        min-h-12
-                        w-full
-                        items-center
-                        justify-center
-                        rounded-full
-                        bg-black
-                        px-5
-                        py-3
-                        text-sm
-                        font-semibold
-                        text-white
-                        transition
-                        hover:bg-zinc-800
-                        disabled:cursor-not-allowed
-                        disabled:opacity-50
-                      "
-                    >
-                      {loginOtpLoading
-                        ? "Verifying..."
-                        : "Verify & Continue"}
-                    </button>
-                  </form>
-
-                  <button
-                    type="button"
-                    disabled={
-                      loginOtpLoading
-                    }
-                    onClick={
-                      sendExistingAccountLoginOTP
-                    }
-                    className="
-                      mt-3
-                      w-full
-                      text-xs
-                      font-semibold
-                      text-zinc-600
-                      underline
-                      underline-offset-4
-                      hover:text-black
-                      disabled:opacity-50
-                    "
-                  >
-                    Resend login OTP
-                  </button>
-                </div>
-              )}
 
             {/* =====================================================
                 SELLER APPLICATION
@@ -2487,7 +1804,7 @@ function Register() {
                             text-xl
                             font-semibold
                             tracking-tight
-                            text-black
+                            text-slate-900
                           "
                         >
                           Apply as Seller
@@ -2528,7 +1845,7 @@ function Register() {
                           rounded-full
                           text-zinc-400
                           hover:bg-zinc-100
-                          hover:text-black
+                          hover:text-slate-900
                         "
                       >
                         <X size={16} />
@@ -2617,16 +1934,16 @@ function Register() {
                           rounded-2xl
                           border
                           border-zinc-200
-                          bg-zinc-50
+                          bg-[#f8faff]
                           px-4
                           py-3
                           text-sm
                           text-zinc-950
                           outline-none
-                          focus:border-black
+                          focus:border-[#2563EB]
                           focus:bg-white
                           focus:ring-4
-                          focus:ring-black/5
+                          focus:ring-[#2563EB]/10
                         "
                       />
 
@@ -2704,15 +2021,15 @@ function Register() {
                             rounded-2xl
                             border
                             border-zinc-200
-                            bg-zinc-50
+                            bg-[#f8faff]
                             px-4
                             text-sm
                             text-zinc-950
                             outline-none
-                            focus:border-black
+                            focus:border-[#2563EB]
                             focus:bg-white
                             focus:ring-4
-                            focus:ring-black/5
+                            focus:ring-[#2563EB]/10
                           "
                         >
                           <option value="Individual">
@@ -2912,7 +2229,7 @@ function Register() {
                         rounded-2xl
                         border
                         border-zinc-200
-                        bg-zinc-50
+                        bg-[#f8faff]
                         p-4
                         sm:p-5
                       "
@@ -2933,7 +2250,7 @@ function Register() {
                               items-center
                               justify-center
                               rounded-xl
-                              bg-black
+                              bg-[#2563EB]
                               text-white
                             "
                           >
@@ -2947,7 +2264,7 @@ function Register() {
                               className="
                                 text-sm
                                 font-semibold
-                                text-black
+                                text-slate-900
                               "
                             >
                               KYC Documents
@@ -3034,7 +2351,7 @@ function Register() {
                           rounded-2xl
                           border
                           border-zinc-200
-                          bg-zinc-50
+                          bg-[#f8faff]
                           p-4
                         "
                       >
@@ -3055,7 +2372,7 @@ function Register() {
                             className="
                               text-xs
                               font-semibold
-                              text-black
+                              text-slate-900
                             "
                           >
                             Uploading KYC documents...
@@ -3082,7 +2399,7 @@ function Register() {
                           rounded-2xl
                           border
                           border-zinc-200
-                          bg-zinc-50
+                          bg-[#f8faff]
                           p-4
                         "
                       >
@@ -3114,15 +2431,15 @@ function Register() {
                         justify-center
                         gap-2
                         rounded-full
-                        bg-black
+                        bg-[#2563EB]
                         px-5
                         py-3.5
                         text-sm
                         font-semibold
                         text-white
-                        shadow-[0_8px_20px_rgba(0,0,0,0.15)]
+                        shadow-[0_8px_24px_rgba(37,99,235,0.22)]
                         transition-all
-                        hover:bg-zinc-800
+                        hover:from-[#1D4ED8] hover:to-[#4338CA]
                         disabled:cursor-not-allowed
                         disabled:opacity-50
                       "
@@ -3164,1100 +2481,68 @@ function Register() {
                 </div>
               )}
 
-            {/* =====================================================
-                MAIN REGISTRATION FORM
-            ===================================================== */}
-
-            {!(loginOtpSent ||
-              showSellerApplication) && (
-              <form
-                onSubmit={registerSeller}
-                noValidate
-                className="
-                  space-y-5
-                  p-5
-                  sm:p-8
-                "
-              >
-                {/* PERSONAL INFORMATION */}
-
-                {accountChecked &&
-                  !accountExists && (
+            {/* PHONE-BASED SELLER REGISTRATION */}
+            {!showSellerApplication && (
+              <form onSubmit={phoneOtpSent ? verifyPhoneAndContinue : registerSeller} noValidate className="space-y-5 p-5 sm:p-8">
+                {!phoneOtpSent ? (
+                  <>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <label className="mb-2 block text-xs font-semibold text-zinc-700" htmlFor="firstName">First name</label>
+                        <input id="firstName" name="firstName" value={form.firstName} onChange={handleChange} placeholder="First name" autoComplete="given-name" className={inputClass("firstName")} />
+                        <InputError field="firstName" />
+                      </div>
+                      <div>
+                        <label className="mb-2 block text-xs font-semibold text-zinc-700" htmlFor="lastName">Last name</label>
+                        <input id="lastName" name="lastName" value={form.lastName} onChange={handleChange} placeholder="Last name" autoComplete="family-name" className={inputClass("lastName")} />
+                        <InputError field="lastName" />
+                      </div>
+                    </div>
                     <div>
-                      <div className="mb-3">
-                        <p
-                          className="
-                            text-sm
-                            font-semibold
-                            text-black
-                          "
-                        >
-                          Personal information
-                        </p>
-
-                        <p
-                          className="
-                            mt-1
-                            text-xs
-                            text-zinc-500
-                          "
-                        >
-                          Enter the details of the seller
-                          account owner.
-                        </p>
+                      <label className="mb-2 block text-xs font-semibold text-zinc-700" htmlFor="phone">Mobile number</label>
+                      <div className="relative">
+                        <Phone size={17} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" />
+                        <input id="phone" name="phone" type="tel" value={form.phone} onChange={handleChange} placeholder="10-digit mobile number" autoComplete="tel" className={`pl-11 ${inputClass("phone")}`} />
                       </div>
-
-                      <div
-                        className="
-                          grid
-                          gap-4
-                          sm:grid-cols-2
-                        "
-                      >
-                        {/* FIRST NAME */}
-
-                        <div>
-                          <label
-                            htmlFor="firstName"
-                            className="
-                              mb-2
-                              block
-                              text-xs
-                              font-semibold
-                              text-zinc-700
-                            "
-                          >
-                            First name
-                          </label>
-
-                          <div className="relative">
-                            <User
-                              size={17}
-                              className="
-                                pointer-events-none
-                                absolute
-                                left-4
-                                top-1/2
-                                -translate-y-1/2
-                                text-zinc-400
-                              "
-                            />
-
-                            <input
-                              id="firstName"
-                              type="text"
-                              name="firstName"
-                              placeholder="John"
-                              value={
-                                form.firstName
-                              }
-                              onChange={
-                                handleChange
-                              }
-                              autoComplete="given-name"
-                              required
-                              className={`
-                                pl-11
-                                ${inputClass(
-                                  "firstName"
-                                )}
-                              `}
-                            />
-                          </div>
-
-                          <InputError
-                            field="firstName"
-                          />
-                        </div>
-
-                        {/* LAST NAME */}
-
-                        <div>
-                          <label
-                            htmlFor="lastName"
-                            className="
-                              mb-2
-                              block
-                              text-xs
-                              font-semibold
-                              text-zinc-700
-                            "
-                          >
-                            Last name
-                          </label>
-
-                          <input
-                            id="lastName"
-                            type="text"
-                            name="lastName"
-                            placeholder="Doe"
-                            value={
-                              form.lastName
-                            }
-                            onChange={
-                              handleChange
-                            }
-                            autoComplete="family-name"
-                            required
-                            className={inputClass(
-                              "lastName"
-                            )}
-                          />
-
-                          <InputError
-                            field="lastName"
-                          />
-                        </div>
+                      <InputError field="phone" />
+                      <p className="mt-2 text-xs text-zinc-500">We will verify this number with a Firebase SMS OTP.</p>
+                    </div>
+                    <div>
+                      <label className="mb-2 block text-xs font-semibold text-zinc-700" htmlFor="email">Email address <span className="font-normal text-zinc-400">(optional)</span></label>
+                      <div className="relative">
+                        <Mail size={17} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" />
+                        <input id="email" name="email" type="email" value={form.email} onChange={handleChange} placeholder="seller@example.com" autoComplete="email" className={`pl-11 ${inputClass("email")}`} />
                       </div>
+                      <InputError field="email" />
                     </div>
-                  )}
-
-                {/* EMAIL */}
-
-                <div>
-                  <label
-                    htmlFor="email"
-                    className="
-                      mb-2
-                      block
-                      text-xs
-                      font-semibold
-                      text-zinc-700
-                    "
-                  >
-                    Email address
-                  </label>
-
-                  <div
-                    className="
-                      flex
-                      flex-col
-                      gap-3
-                      sm:flex-row
-                    "
-                  >
-                    <div className="relative flex-1">
-                      <Mail
-                        size={17}
-                        className="
-                          pointer-events-none
-                          absolute
-                          left-4
-                          top-1/2
-                          -translate-y-1/2
-                          text-zinc-400
-                        "
-                      />
-
-                      <input
-                        id="email"
-                        type="email"
-                        name="email"
-                        placeholder="seller@example.com"
-                        value={form.email}
-                        onChange={
-                          handleChange
-                        }
-                        autoComplete="email"
-                        required
-                        className={`
-                          pl-11
-                          ${inputClass(
-                            "email"
-                          )}
-                        `}
-                      />
+                    <div className="flex items-start gap-3 rounded-2xl border border-zinc-200 bg-[#f8faff] p-4">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-black text-white"><ShieldCheck size={18} /></div>
+                      <div><p className="text-xs font-semibold text-black">Phone-first secure verification</p><p className="mt-1 text-xs leading-5 text-zinc-500">Your mobile number is the only authentication method here. Email is optional contact information.</p></div>
                     </div>
-
-                    <button
-                      type="button"
-                      onClick={
-                        checkAccount
-                      }
-                      disabled={
-                        checkingAccount
-                      }
-                      className="
-                        flex
-                        h-12
-                        shrink-0
-                        items-center
-                        justify-center
-                        gap-2
-                        rounded-2xl
-                        bg-black
-                        px-5
-                        text-sm
-                        font-semibold
-                        text-white
-                        transition
-                        hover:bg-zinc-800
-                        disabled:cursor-not-allowed
-                        disabled:opacity-60
-                      "
-                    >
-                      {checkingAccount ? (
-                        <>
-                          <span
-                            className="
-                              h-4
-                              w-4
-                              animate-spin
-                              rounded-full
-                              border-2
-                              border-white/30
-                              border-t-white
-                            "
-                          />
-
-                          Checking...
-                        </>
-                      ) : (
-                        <>
-                          Check Account
-
-                          <ArrowRight
-                            size={16}
-                          />
-                        </>
-                      )}
+                    <button type="submit" disabled={loading || phoneOtpLoading} className="group flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-[#2563EB] to-[#4F46E5] px-5 py-3.5 text-sm font-semibold text-white transition hover:from-[#1D4ED8] hover:to-[#4338CA] disabled:opacity-50">
+                      {loading || phoneOtpLoading ? <><span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />Sending OTP...</> : <>Continue with phone OTP <ArrowRight size={17} /></>}
                     </button>
-                  </div>
-
-                  <InputError
-                    field="email"
-                  />
-
-                  <p
-                    className="
-                      mt-2
-                      text-[11px]
-                      leading-5
-                      text-zinc-500
-                    "
-                  >
-                    Enter your email first. If you
-                    already have an Odikart account,
-                    your account information will be
-                    shown automatically.
-                  </p>
-                </div>
-
-                {/* EXISTING ACCOUNT */}
-
-                {accountExists &&
-                  existingUser && (
-                    <div
-                      className="
-                        rounded-2xl
-                        border
-                        border-zinc-200
-                        bg-zinc-50
-                        p-4
-                      "
-                    >
-                      <div
-                        className="
-                          flex
-                          items-center
-                          gap-3
-                        "
-                      >
-                        <div
-                          className="
-                            flex
-                            h-12
-                            w-12
-                            shrink-0
-                            items-center
-                            justify-center
-                            overflow-hidden
-                            rounded-full
-                            bg-black
-                            text-white
-                          "
-                        >
-                          {existingUser.image ? (
-                            <img
-                              src={
-                                existingUser.image
-                              }
-                              alt={
-                                existingUser.firstName ||
-                                "User"
-                              }
-                              className="
-                                h-full
-                                w-full
-                                object-cover
-                              "
-                            />
-                          ) : (
-                            <User size={20} />
-                          )}
-                        </div>
-
-                        <div className="min-w-0 flex-1">
-                          <p
-                            className="
-                              text-sm
-                              font-semibold
-                              text-black
-                            "
-                          >
-                            {
-                              existingUser.firstName
-                            }{" "}
-                            {
-                              existingUser.lastName
-                            }
-                          </p>
-
-                          <p
-                            className="
-                              mt-0.5
-                              truncate
-                              text-xs
-                              text-zinc-500
-                            "
-                          >
-                            {
-                              existingUser.email
-                            }
-                          </p>
-                        </div>
-
-                        <div
-                          className="
-                            flex
-                            items-center
-                            gap-1.5
-                            rounded-full
-                            bg-white
-                            px-3
-                            py-1.5
-                            text-[10px]
-                            font-semibold
-                            text-black
-                          "
-                        >
-                          <Check size={12} />
-                          Account found
-                        </div>
-                      </div>
-
-                      <div
-                        className="
-                          mt-5
-                          grid
-                          gap-4
-                          border-t
-                          border-zinc-200
-                          pt-4
-                          sm:grid-cols-2
-                        "
-                      >
-                        <div>
-                          <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
-                            First name
-                          </p>
-
-                          <p className="mt-1 text-sm font-medium text-zinc-900">
-                            {existingUser.firstName ||
-                              "-"}
-                          </p>
-                        </div>
-
-                        <div>
-                          <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
-                            Last name
-                          </p>
-
-                          <p className="mt-1 text-sm font-medium text-zinc-900">
-                            {existingUser.lastName ||
-                              "-"}
-                          </p>
-                        </div>
-
-                        <div>
-                          <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
-                            Email
-                          </p>
-
-                          <p className="mt-1 break-all text-sm font-medium text-zinc-900">
-                            {existingUser.email ||
-                              "-"}
-                          </p>
-                        </div>
-
-                        <div>
-                          <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
-                            Phone
-                          </p>
-
-                          <p className="mt-1 text-sm font-medium text-zinc-900">
-                            {existingUser.phone ||
-                              "-"}
-                          </p>
-                        </div>
-
-                        <div>
-                          <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
-                            Account type
-                          </p>
-
-                          <p className="mt-1 text-sm font-medium capitalize text-zinc-900">
-                            {existingUser.role ||
-                              "user"}
-                          </p>
-                        </div>
-
-                        <div>
-                          <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
-                            Seller status
-                          </p>
-
-                          <p className="mt-1 text-sm font-medium capitalize text-zinc-900">
-                            {existingUser.sellerStatus ||
-                              "Not applied"}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* SELLER ACTION */}
-
-                      {existingUser.sellerStatus ===
-                        "none" ||
-                      existingUser.sellerStatus ===
-                        "rejected" ||
-                      !existingUser.sellerStatus ? (
-                        <div
-                          className="
-                            mt-5
-                            rounded-2xl
-                            border
-                            border-zinc-200
-                            bg-white
-                            p-4
-                          "
-                        >
-                          <div className="flex items-start gap-3">
-                            <div
-                              className="
-                                flex
-                                h-9
-                                w-9
-                                shrink-0
-                                items-center
-                                justify-center
-                                rounded-xl
-                                bg-black
-                                text-white
-                              "
-                            >
-                              <Store size={17} />
-                            </div>
-
-                            <div className="min-w-0 flex-1">
-                              <p className="text-sm font-semibold text-black">
-                                {existingUser.sellerStatus ===
-                                "rejected"
-                                  ? "You can apply again"
-                                  : "You are not a seller yet"}
-                              </p>
-
-                              <p className="mt-1 text-xs leading-5 text-zinc-500">
-                                {existingUser.sellerStatus ===
-                                "rejected"
-                                  ? "Your previous seller application was rejected. You can submit a new application."
-                                  : "Your Odikart account is ready. Apply as a seller without creating another account."}
-                              </p>
-                            </div>
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={
-                              handleApplyAsSeller
-                            }
-                            className="
-                              group
-                              mt-4
-                              flex
-                              min-h-12
-                              w-full
-                              items-center
-                              justify-center
-                              gap-2
-                              rounded-full
-                              bg-black
-                              px-5
-                              py-3
-                              text-sm
-                              font-semibold
-                              text-white
-                              transition-all
-                              hover:bg-zinc-800
-                            "
-                          >
-                            <Store size={17} />
-
-                            {existingUser.sellerStatus ===
-                            "rejected"
-                              ? "Apply Again as Seller"
-                              : "Apply as Seller"}
-
-                            <ArrowRight
-                              size={17}
-                              className="
-                                transition-transform
-                                group-hover:translate-x-1
-                              "
-                            />
-                          </button>
-                        </div>
-                      ) : existingUser.sellerStatus ===
-                        "pending" ? (
-                        <div
-                          className="
-                            mt-5
-                            flex
-                            items-start
-                            gap-3
-                            rounded-xl
-                            border
-                            border-zinc-200
-                            bg-zinc-50
-                            p-4
-                          "
-                        >
-                          <ShieldCheck
-                            size={18}
-                            className="mt-0.5 shrink-0 text-zinc-700"
-                          />
-
-                          <div>
-                            <p className="text-sm font-semibold text-black">
-                              Seller application under review
-                            </p>
-
-                            <p className="mt-1 text-xs leading-5 text-zinc-500">
-                              Your seller application has already
-                              been submitted. Please wait for admin
-                              approval.
-                            </p>
-                          </div>
-                        </div>
-                      ) : existingUser.sellerStatus ===
-                        "approved" ? (
-                        <div
-                          className="
-                            mt-5
-                            flex
-                            items-start
-                            gap-3
-                            rounded-xl
-                            border
-                            border-zinc-200
-                            bg-zinc-50
-                            p-4
-                          "
-                        >
-                          <Check
-                            size={18}
-                            className="mt-0.5 shrink-0 text-zinc-700"
-                          />
-
-                          <div>
-                            <p className="text-sm font-semibold text-black">
-                              Seller account approved
-                            </p>
-
-                            <p className="mt-1 text-xs leading-5 text-zinc-500">
-                              This account is already an approved
-                              seller account.
-                            </p>
-                          </div>
-                        </div>
-                      ) : existingUser.sellerStatus ===
-                        "suspended" ? (
-                        <div
-                          className="
-                            mt-5
-                            flex
-                            items-start
-                            gap-3
-                            rounded-xl
-                            border
-                            border-zinc-200
-                            bg-zinc-50
-                            p-4
-                          "
-                        >
-                          <ShieldCheck
-                            size={18}
-                            className="mt-0.5 shrink-0 text-zinc-700"
-                          />
-
-                          <div>
-                            <p className="text-sm font-semibold text-black">
-                              Seller account suspended
-                            </p>
-
-                            <p className="mt-1 text-xs leading-5 text-zinc-500">
-                              Please contact support to continue.
-                            </p>
-                          </div>
-                        </div>
-                      ) : null}
+                  </>
+                ) : (
+                  <>
+                    <div className="rounded-2xl border border-zinc-200 bg-[#f8faff] p-4 text-center">
+                      <p className="text-sm font-semibold text-zinc-900">Verify your mobile number</p>
+                      <p className="mt-1 text-xs text-zinc-500">Enter the 6-digit code sent to <strong>{normalizePhone(form.phone)}</strong></p>
                     </div>
-                  )}
-
-                {/* PHONE */}
-
-                {accountChecked &&
-                  !accountExists && (
-                    <>
-                      <div>
-                        <label
-                          htmlFor="phone"
-                          className="
-                            mb-2
-                            block
-                            text-xs
-                            font-semibold
-                            text-zinc-700
-                          "
-                        >
-                          Phone number
-                        </label>
-
-                        <div className="relative">
-                          <Phone
-                            size={17}
-                            className="
-                              pointer-events-none
-                              absolute
-                              left-4
-                              top-1/2
-                              -translate-y-1/2
-                              text-zinc-400
-                            "
-                          />
-
-                          <input
-                            id="phone"
-                            type="tel"
-                            name="phone"
-                            placeholder="+91 98765 43210"
-                            value={form.phone}
-                            onChange={
-                              handleChange
-                            }
-                            autoComplete="tel"
-                            required
-                            className={`
-                              pl-11
-                              ${inputClass(
-                                "phone"
-                              )}
-                            `}
-                          />
-                        </div>
-
-                        <InputError
-                          field="phone"
-                        />
-                      </div>
-
-                      {/* PASSWORD */}
-
-                      <div>
-                        <div
-                          className="
-                            mb-2
-                            flex
-                            items-center
-                            justify-between
-                          "
-                        >
-                          <label
-                            htmlFor="password"
-                            className="
-                              text-xs
-                              font-semibold
-                              text-zinc-700
-                            "
-                          >
-                            Password
-                          </label>
-
-                          <span
-                            className="
-                              text-[10px]
-                              font-medium
-                              text-zinc-400
-                            "
-                          >
-                            6+ characters
-                          </span>
-                        </div>
-
-                        <div className="relative">
-                          <input
-                            id="password"
-                            type={
-                              showPassword
-                                ? "text"
-                                : "password"
-                            }
-                            name="password"
-                            placeholder="Create a secure password"
-                            value={
-                              form.password
-                            }
-                            onChange={
-                              handleChange
-                            }
-                            autoComplete="new-password"
-                            minLength={6}
-                            required
-                            className={`
-                              pr-12
-                              ${inputClass(
-                                "password"
-                              )}
-                            `}
-                          />
-
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setShowPassword(
-                                (prev) =>
-                                  !prev
-                              )
-                            }
-                            className="
-                              absolute
-                              right-2
-                              top-1/2
-                              flex
-                              h-9
-                              w-9
-                              -translate-y-1/2
-                              items-center
-                              justify-center
-                              rounded-xl
-                              text-zinc-400
-                              transition
-                              hover:bg-zinc-100
-                              hover:text-black
-                            "
-                          >
-                            {showPassword ? (
-                              <EyeOff
-                                size={17}
-                              />
-                            ) : (
-                              <Eye
-                                size={17}
-                              />
-                            )}
-                          </button>
-                        </div>
-
-                        {form.password && (
-                          <div className="mt-3">
-                            <div
-                              className="
-                                h-1
-                                overflow-hidden
-                                rounded-full
-                                bg-zinc-100
-                              "
-                            >
-                              <div
-                                className={`
-                                  h-full
-                                  rounded-full
-                                  transition-all
-                                  duration-500
-                                  ${passwordStrength.className}
-                                `}
-                                style={{
-                                  width:
-                                    passwordStrength.width,
-                                }}
-                              />
-                            </div>
-
-                            <div
-                              className="
-                                mt-2
-                                flex
-                                justify-between
-                              "
-                            >
-                              <span
-                                className="
-                                  text-[10px]
-                                  text-zinc-400
-                                "
-                              >
-                                Strong passwords use
-                                numbers and symbols.
-                              </span>
-
-                              <span
-                                className="
-                                  text-[10px]
-                                  font-semibold
-                                  text-black
-                                "
-                              >
-                                {
-                                  passwordStrength.label
-                                }
-                              </span>
-                            </div>
-                          </div>
-                        )}
-
-                        <InputError
-                          field="password"
-                        />
-                      </div>
-
-                      {/* VERIFICATION */}
-
-                      <div
-                        className="
-                          flex
-                          items-start
-                          gap-3
-                          rounded-2xl
-                          border
-                          border-zinc-200
-                          bg-zinc-50
-                          p-4
-                        "
-                      >
-                        <div
-                          className="
-                            flex
-                            h-9
-                            w-9
-                            shrink-0
-                            items-center
-                            justify-center
-                            rounded-xl
-                            bg-black
-                            text-white
-                          "
-                        >
-                          <ShieldCheck
-                            size={18}
-                          />
-                        </div>
-
-                        <div>
-                          <p
-                            className="
-                              text-xs
-                              font-semibold
-                              text-black
-                            "
-                          >
-                            Secure email verification
-                          </p>
-
-                          <p
-                            className="
-                              mt-1
-                              text-xs
-                              leading-5
-                              text-zinc-500
-                            "
-                          >
-                            We'll send a verification OTP
-                            after you create your seller
-                            account.
-                          </p>
-                        </div>
-                      </div>
-                    </>
-                  )}
-
-                {/* SUBMIT */}
-
-                <button
-                  type="submit"
-                  disabled={
-                    loading ||
-                    checkingAccount ||
-                    !accountChecked
-                  }
-                  className="
-                    group
-                    flex
-                    min-h-12
-                    w-full
-                    items-center
-                    justify-center
-                    gap-2
-                    rounded-full
-                    bg-black
-                    px-5
-                    py-3.5
-                    text-sm
-                    font-semibold
-                    text-white
-                    shadow-[0_8px_20px_rgba(0,0,0,0.15)]
-                    transition-all
-                    hover:bg-zinc-800
-                    disabled:cursor-not-allowed
-                    disabled:opacity-50
-                  "
-                >
-                  {loading ? (
-                    <>
-                      <span
-                        className="
-                          h-4
-                          w-4
-                          animate-spin
-                          rounded-full
-                          border-2
-                          border-white/30
-                          border-t-white
-                        "
-                      />
-
-                      Creating account...
-                    </>
-                  ) : accountExists ? (
-                    existingUser?.sellerStatus ===
-                      "none" ||
-                    !existingUser?.sellerStatus ||
-                    existingUser?.sellerStatus ===
-                      "rejected" ? (
-                      <>
-                        <Store size={17} />
-
-                        {existingUser?.sellerStatus ===
-                        "rejected"
-                          ? "Apply Again as Seller"
-                          : "Apply as Seller"}
-
-                        <ArrowRight
-                          size={17}
-                          className="
-                            transition-transform
-                            group-hover:translate-x-1
-                          "
-                        />
-                      </>
-                    ) : existingUser?.sellerStatus ===
-                      "pending" ? (
-                      <>
-                        <ShieldCheck
-                          size={17}
-                        />
-
-                        Application Under Review
-                      </>
-                    ) : existingUser?.sellerStatus ===
-                      "approved" ? (
-                      <>
-                        <Check size={17} />
-
-                        Seller Account Approved
-                      </>
-                    ) : (
-                      <>
-                        Continue to Login
-
-                        <ArrowRight
-                          size={17}
-                          className="
-                            transition-transform
-                            group-hover:translate-x-1
-                          "
-                        />
-                      </>
-                    )
-                  ) : (
-                    <>
-                      Create seller account
-
-                      <ArrowRight
-                        size={17}
-                        className="
-                          transition-transform
-                          group-hover:translate-x-1
-                        "
-                      />
-                    </>
-                  )}
-                </button>
-
-                {/* LOGIN */}
-
-                <div
-                  className="
-                    border-t
-                    border-zinc-100
-                    pt-5
-                    text-center
-                  "
-                >
-                  <p
-                    className="
-                      text-xs
-                      text-zinc-500
-                    "
-                  >
-                    Already have an Odikart account?
-                  </p>
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      navigate("/login")
-                    }
-                    className="
-                      mt-1
-                      rounded-full
-                      px-3
-                      py-2
-                      text-sm
-                      font-semibold
-                      text-black
-                      transition
-                      hover:bg-zinc-100
-                    "
-                  >
-                    Sign in
-                  </button>
+                    <input value={phoneOtp} onChange={(e) => setPhoneOtp(e.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="Enter 6-digit OTP" className="h-12 w-full rounded-2xl border border-zinc-200 bg-[#f8faff] px-4 text-center text-lg font-semibold tracking-[0.35em] text-black outline-none focus:border-[#2563EB] focus:bg-white focus:ring-4 focus:ring-[#2563EB]/10" />
+                    <button type="submit" disabled={phoneOtpLoading || phoneOtp.length !== 6} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-[#2563EB] to-[#4F46E5] px-5 py-3 text-sm font-semibold text-white transition hover:from-[#1D4ED8] hover:to-[#4338CA] disabled:opacity-50">{phoneOtpLoading ? "Verifying..." : "Verify OTP & Continue"}</button>
+                    <button type="button" disabled={phoneOtpLoading} onClick={sendPhoneVerification} className="w-full py-2 text-xs font-semibold text-zinc-600 underline underline-offset-4 disabled:opacity-50">Resend OTP</button>
+                    <button type="button" disabled={phoneOtpLoading} onClick={() => { resetRecaptcha(); setPhoneOtpSent(false); setConfirmationResult(null); setPhoneOtp(""); }} className="w-full py-2 text-xs font-semibold text-zinc-500">Change phone number</button>
+                  </>
+                )}
+                <div className="border-t border-zinc-100 pt-5 text-center">
+                  <p className="text-xs text-zinc-500">Already have an Odikart account?</p>
+                  <button type="button" onClick={() => navigate("/login")} className="mt-1 rounded-full px-3 py-2 text-sm font-semibold text-black transition hover:bg-zinc-100">Sign in</button>
                 </div>
-
-                {/* TERMS */}
-
-                <p
-                  className="
-                    text-center
-                    text-[10px]
-                    leading-5
-                    text-zinc-400
-                  "
-                >
-                  By creating a seller account,
-                  you agree to Odikart's seller
-                  terms and policies.
-                </p>
+                <p className="text-center text-[10px] leading-5 text-zinc-400">By applying as a seller, you agree to Odikart's seller terms and policies.</p>
               </form>
             )}
+
           </section>
         </div>
       </main>
