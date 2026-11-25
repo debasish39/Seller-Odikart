@@ -72,21 +72,17 @@ import Withdraw from "./pages/seller/wallet/Withdraw";
 ================================ */
 
 import Settings from "./pages/seller/Settings";
-
-
 /* ================================
    PROTECTION
 ================================ */
 
 import ProtectRoute from "./routes/ProtectedRoute";
 
-
 function App() {
 
   return (
 
     <BrowserRouter>
-
       <Routes>
 
         {/* =====================================================
